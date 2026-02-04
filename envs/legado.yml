@@ -1,0 +1,30 @@
+name: viralflow
+channels:
+  - bioconda
+  - bioconda/label/cf201901
+  - conda-forge
+  - conda-forge/label/cf201901
+  - conda-forge/label/main
+  - pkgs/main
+  - wallaulab
+  
+dependencies:
+  # núcleo Python
+  - python >=3.9,<3.13
+  - pip
+  - openjdk=17
+
+  # libs Python úteis pro wrapper / scripts
+  - biopython
+  - numpy
+  - pandas
+
+  # ferramentas de linha de comando usadas pelo pipeline/wrapper
+  - snpeff
+  - jq
+  - gawk
+  - squashfs-tools
+  - spython
+
+  # OBS: nextflow & singularityce propositalmente FORA do env.yml
+  # para evitar conflitos com curl/libnghttp2/c-ares. Instalar por fora.
