@@ -20,5 +20,5 @@ dependencies:
   - openjdk=17
   - procps-ng
   - spython=0.3.1
-#  - singularityce=3.11.4
+  - singularityce=3.11.4
 
