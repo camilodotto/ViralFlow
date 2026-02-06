@@ -1,103 +1,209 @@
-import subprocess
+#!/usr/bin/env python3
+from __future__ import annotations
+
 import os
 import sys
+import shutil
+import subprocess
+from pathlib import Path
+from typing import Dict, List, Tuple
 
-arch = sys.argv[1]
 
-containers = [
-    "pangolin:4.3.sif",
-    "snpeff:5.0.sif",
-]
+def eprint(msg: str) -> None:
+    print(msg, file=sys.stderr)
 
-# temporary logic, before push to remote repo
-container_commands = [
-    f"singularity build -F --fakeroot --sandbox pangolin:4.3.sif def_files/{arch}/Singularity_pangolin",
-    f"singularity build -F --fakeroot --sandbox snpeff:5.0.sif def_files/{arch}/Singularity_snpEff"
-]
 
-failed_containers = []
-already_built = []
-success = True  # Control variable
+def path_exists_as_container(p: Path) -> bool:
+    # Pode ser sandbox (diretório) ou sif (arquivo)
+    return p.is_dir() or p.is_file()
 
-def container_exists(container):
-    return os.path.isdir(container)
 
-def build_container(container, command):
-    print(f"@ Building {container}...")
+def ensure_dir(p: Path) -> None:
+    p.mkdir(parents=True, exist_ok=True)
 
-    if container_exists(container):
-        print(f"  > Container already exists. If you desire to rebuild the container, use the following command on 'ViralFlow/vfnext/containers/' directory:")
-        print(f"    > {command}")
-        already_built.append(container)
-        return True
 
-    try:
-        subprocess.check_call(command, shell=True)
-        print(f"  > Done <")
-        return True
-    except subprocess.CalledProcessError as e:
-        print(f"  > Failed <")
-        print(f"Error: {e}")
-        failed_containers.append((container, command))
-        return False
+def copy_container(src: Path, dst: Path) -> None:
+    """
+    Copia container sandbox (dir) ou sif (file) do workdir interno da VM
+    para o diretório do repo (que pode estar em /Users/... montado do macOS).
+    """
+    if dst.exists():
+        # mantém comportamento original (não sobrescreve)
+        return
 
-print("Building containers:")
+    if src.is_dir():
+        shutil.copytree(src, dst)
+    else:
+        ensure_dir(dst.parent)
+        shutil.copy2(src, dst)
 
-for container, command in zip(containers, container_commands):
-    if not build_container(container, command):
-        success = False
 
-print("\nSummary:")
+def run(cmd: List[str], *, cwd: Path, env: Dict[str, str]) -> None:
+    subprocess.check_call(cmd, cwd=str(cwd), env=env)
 
-if failed_containers:
-    print("\nSome containers failed to build. Try to build the containers on 'ViralFlow/vfnext/containers/' directory. Here are the details:")
-    for container, command in failed_containers:
-        print(f"\nContainer {container} failed to build.")
-        print(f"Suggested command to build {container}:")
-        print(f"  {command}")
-    success = False
 
-if success:
-    print("\nAll containers were successfully built.")
-else:
-    print("\nSome containers failed to build. Please check the error messages above.")
+def main() -> int:
+    if len(sys.argv) < 2:
+        eprint("Usage: build_containers.py <arch>\nExample: build_containers.py arm64")
+        return 2
 
-if success:
+    arch = sys.argv[1].strip()
+
+    containers_dir = Path(__file__).resolve().parent  # .../vfnext/containers (pode ser /Users/... no Lima)
+    vm_home = Path.home().resolve()                  # HOME real da VM (ex.: /home/usuario)
+
+    # Base interna (no Linux real da VM)
+    base = vm_home / ".viralflow" / "apptainer"
+    tmpdir = base / "tmp"
+    cachedir = base / "cache"
+    workdir = base / "work" / f"build_{arch}"
+
+    ensure_dir(tmpdir)
+    ensure_dir(cachedir)
+    ensure_dir(workdir)
+
+    # Força tmp/cache para dentro do HOME real da VM
+    # (Apptainer usa /tmp por default, mas TMPDIR e APPTAINER_TMPDIR sobrescrevem isso)
+    env = os.environ.copy()
+    env.update({
+        "TMPDIR": str(tmpdir),
+        "APPTAINER_TMPDIR": str(tmpdir),
+        "APPTAINER_CACHEDIR": str(cachedir),
+        # compat (caso exista alguma chamada antiga)
+        "SINGULARITY_TMPDIR": str(tmpdir),
+        "SINGULARITY_CACHEDIR": str(cachedir),
+    })
+
+    # Containers que o script já construía
+    specs: List[Tuple[str, str]] = [
+        ("pangolin:4.3.sif", f"def_files/{arch}/Singularity_pangolin"),
+        ("snpeff:5.0.sif",   f"def_files/{arch}/Singularity_snpEff"),
+    ]
+
+    failed: List[Tuple[str, str]] = []
+    already_built: List[str] = []
+
+    print("Building containers:")
+    for image_name, def_rel in specs:
+        dst = containers_dir / image_name
+        src = workdir / image_name  # build sempre no Linux local, depois copia para o repo
+
+        def_path = (containers_dir / def_rel).resolve()
+        if not def_path.exists():
+            msg = f"Definition file not found: {def_path}"
+            eprint(msg)
+            failed.append((image_name, msg))
+            continue
+
+        print(f"@ Building {image_name}...")
+
+        if path_exists_as_container(dst):
+            print(" > Container already exists.")
+            print("If you desire to rebuild it, delete it first and rerun build-containers.")
+            already_built.append(image_name)
+            continue
+
+        # Apptainer build (mantendo sandbox como no script original)
+        # Obs: build ocorre em workdir (Linux real), evitando build-temp-* no /Users/...
+        cmd = [
+            "apptainer", "build",
+            "-F",
+            "--fakeroot",
+            "--sandbox",
+            str(src),
+            str(def_path),
+        ]
+
+        try:
+            run(cmd, cwd=workdir, env=env)
+            # Copia o resultado para o repo montado
+            copy_container(src, dst)
+            print(" > Done <")
+        except subprocess.CalledProcessError as e:
+            print(" > Failed <")
+            failed.append((image_name, " ".join(cmd)))
+            eprint(f"Error: {e}")
+
+    print("\nSummary:")
+    success = (len(failed) == 0)
+
+    if failed:
+        print("\nSome containers failed to build.")
+        print("Try to build again. Details:")
+        for image, cmd in failed:
+            print(f"\nContainer {image} failed.")
+            print(f"Command: {cmd}")
+
+    if success:
+        print("\nAll containers were successfully built.")
+    else:
+        print("\nSome containers failed to build. Please check messages above.")
+        return 1
+
+    # --- Additional steps (mantém lógica do original, só trocando singularity -> apptainer) ---
     print("\nExecuting additional steps:\n")
 
-    print("  > Loading sars-cov2 nextclade dataset...\n")
-    nextclade_command = "singularity exec -B nextclade_dataset/sars-cov-2:/tmp nextclade:3.18.sif nextclade dataset get --name 'sars-cov-2' --output-dir '/tmp'"
-    try:
-        subprocess.check_call(nextclade_command, shell=True)
-        print("    > Done <\n")
-    except subprocess.CalledProcessError as e:
-        print("    > Failed <")
-        print(f"Error: {e}")
-        success = False
+    # 1) nextclade dataset (se o container existir)
+    nextclade_img = containers_dir / "nextclade:3.18.sif"
+    if path_exists_as_container(nextclade_img):
+        print(" > Loading sars-cov2 nextclade dataset...\n")
+        nextclade_command = [
+            "apptainer", "exec",
+            "-B", str((containers_dir / "nextclade_dataset/sars-cov-2").resolve()) + ":/tmp",
+            str(nextclade_img),
+            "nextclade", "dataset", "get",
+            "--name", "sars-cov-2",
+            "--output-dir", "/tmp",
+        ]
+        try:
+            run(nextclade_command, cwd=containers_dir, env=env)
+            print(" > Done <\n")
+        except subprocess.CalledProcessError as e:
+            print(" > Failed <")
+            eprint(f"Error: {e}")
+            return 1
+    else:
+        print(" > Skipping nextclade dataset: nextclade:3.18.sif not found.\n")
 
-    print("  > Downloading snpeff database catalog...")
-    snpeff_command = "singularity exec snpeff:5.0.sif snpEff databases > snpEff_DB.catalog"
-    try:
-        subprocess.check_call(snpeff_command, shell=True)
-        print("    > Done <")
-    except subprocess.CalledProcessError as e:
-        print("    > Failed <")
-        print(f"Error: {e}")
-        success = False
+    # 2) snpEff catalog
+    snpeff_img = containers_dir / "snpeff:5.0.sif"
+    if path_exists_as_container(snpeff_img):
+        print(" > Downloading snpeff database catalog...")
+        snpeff_command = [
+            "apptainer", "exec",
+            str(snpeff_img),
+            "snpEff", "databases",
+        ]
+        try:
+            # captura saída para arquivo como no original
+            result = subprocess.check_output(snpeff_command, cwd=str(containers_dir), env=env, text=True)
+            (containers_dir / "snpEff_DB.catalog").write_text(result, encoding="utf-8")
+            print(" > Done <")
+        except subprocess.CalledProcessError as e:
+            print(" > Failed <")
+            eprint(f"Error: {e}")
+            return 1
+    else:
+        print(" > Skipping snpEff catalog: snpeff:5.0.sif not found.\n")
 
-    # Check if unsquashfs is in the correct location
+    # 3) unsquashfs check (mantém aviso do original)
     unsquashfs_desired_location = "/usr/local/bin/unsquashfs"
     if not os.path.exists(unsquashfs_desired_location):
-        print("\n\033[91mError:\n  > unsquashfs executable not found at expected location. You should create a symbolic link using the following command:\033[0m")
-        unsquashfs_location = os.path.join(os.environ["HOME"], "miniconda3/envs/viralflow/bin/unsquashfs")
-        print(f"   >  sudo ln -s {unsquashfs_location} /usr/local/bin/unsquashfs\n")
-        print(f"  > If the first symbolic link does not solve the error you can alternatively create a symbolic link using the following command:")
-        print(f"   >  sudo ln -s /usr/bin/unsquashfs /usr/local/bin/unsquashfs\n")
+        print("\n\033[91mError:\n > unsquashfs executable not found at expected location.")
+        print("You should create a symbolic link using one of the following commands:\033[0m")
+        unsquashfs_location = os.path.join(os.environ.get("HOME", str(vm_home)), "miniconda3/envs/viralflow/bin/unsquashfs")
+        print(f" > sudo ln -s {unsquashfs_location} /usr/local/bin/unsquashfs\n")
+        print(" > If that does not solve it, try:")
+        print(" > sudo ln -s /usr/bin/unsquashfs /usr/local/bin/unsquashfs\n")
+        print(f" > unsquashfs expected at {unsquashfs_desired_location}\n")
+        print(" > After creating the link, rerun 'viralflow -build_containers' to finish setup.")
+        return 1
 
-        # Print a message indicating the unsquashfs location
-        print(f"  > unsquashfs executable is located at {unsquashfs_location} or at /usr/bin/unsquashfs\n")
-        print(f"  > After create the symbolic link for unsquashfs, please run 'viralflow -build_containers' command again to finish the additional steps necessary to run ViralFlow correctly.")
+    print("\nAll steps from '-build_containers' completed successfully.")
+    print("You can test ViralFlow using the following command:")
+    print(" > viralflow -run --params_file test_files/sars-cov-2.params")
+    return 0
 
-if success:
-    print("\nAll steps from '-build_containers' completed successfully. You can test ViralFlow using the following command:")
-    print("   > viralflow -run --params_file test_files/sars-cov-2.params")
+
+if __name__ == "__main__":
+    raise SystemExit(main())
