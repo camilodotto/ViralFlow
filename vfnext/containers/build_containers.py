@@ -109,7 +109,7 @@ def main() -> int:
             "apptainer", "build",
             "-F",
             "--fakeroot",
-            "--sandbox",
+            # "--sandbox",
             str(src),
             str(def_path),
         ]
