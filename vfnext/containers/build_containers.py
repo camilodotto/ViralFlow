@@ -113,9 +113,13 @@ def main() -> int:
             str(src),
             str(def_path),
         ]
+        cmd_create_overlay = [
+            "apptainer", "overlay", "create", "--size", "2048", str(src),
+        ]
 
         try:
             run(cmd, cwd=workdir, env=env)
+            run(cmd_create_overlay, cwd=workdir, env=env)
             # Copia o resultado para o repo montado
             copy_container(src, dst)
             print(" > Done <")
