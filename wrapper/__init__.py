@@ -32,6 +32,17 @@ def _overlay_path(containers_dir: Path, image_name: str) -> Path:
     return containers_dir / f"{safe_name}.overlay"
 
 
+def _pangolin_exec_prefix(runtime: str, overlay_path: Path, container_path: Path):
+    return [
+        runtime,
+        "exec",
+        "--fakeroot",
+        "--overlay",
+        str(overlay_path),
+        str(container_path),
+    ]
+
+
 def add_entries_to_DB(root_path, org_name, refseq_code, arch):
     """
     add entries provided to snpeff database
@@ -151,19 +162,57 @@ def update_pangolin(root_path):
     overlay_path = _overlay_path(containers_dir, "pangolin:4.3")
 
     _ensure_overlay(runtime, overlay_path)
+    exec_prefix = _pangolin_exec_prefix(runtime, overlay_path, container_path)
+
+    # Pangolin major/minor upgrades can require environment changes that
+    # `pangolin --update` does not apply by itself.
     _run(
-        [
-            runtime,
-            "exec",
-            "--fakeroot",
-            "--overlay",
-            str(overlay_path),
-            str(container_path),
-            "pangolin",
-            "--update",
+        exec_prefix
+        + [
+            "/usr/local/bin/mm/bin/micromamba",
+            "install",
+            "-y",
+            "-c",
+            "bioconda",
+            "-c",
+            "conda-forge",
+            "snakemake>=8",
         ],
         cwd=containers_dir,
     )
+    _run(
+        exec_prefix
+        + [
+            "/usr/local/bin/mm/bin/python",
+            "-m",
+            "pip",
+            "install",
+            "--upgrade",
+            "setuptools<81",
+            "wheel",
+        ],
+        cwd=containers_dir,
+    )
+
+    for dependency in [
+        "git+https://github.com/cov-lineages/pangolin.git",
+        "git+https://github.com/cov-lineages/pangolin-data.git",
+        "git+https://github.com/cov-lineages/scorpio.git",
+        "git+https://github.com/cov-lineages/constellations.git",
+    ]:
+        _run(
+            exec_prefix
+            + [
+                "/usr/local/bin/mm/bin/python",
+                "-m",
+                "pip",
+                "install",
+                "--upgrade",
+                "--no-build-isolation",
+                dependency,
+            ],
+            cwd=containers_dir,
+        )
 
 def update_pangolin_data(root_path):
     runtime = _get_container_runtime()
@@ -173,13 +222,8 @@ def update_pangolin_data(root_path):
 
     _ensure_overlay(runtime, overlay_path)
     _run(
-        [
-            runtime,
-            "exec",
-            "--fakeroot",
-            "--overlay",
-            str(overlay_path),
-            str(container_path),
+        _pangolin_exec_prefix(runtime, overlay_path, container_path)
+        + [
             "pangolin",
             "--update-data",
         ],
