@@ -169,9 +169,13 @@ def update_pangolin(root_path):
     _run(
         exec_prefix
         + [
-            "/usr/local/bin/mm/bin/micromamba",
+            "env",
+            "MAMBA_ROOT_PREFIX=/usr/local/bin/mm",
+            "/usr/local/bin/micromamba",
             "install",
             "-y",
+            "--prefix",
+            "/usr/local/bin/mm",
             "-c",
             "bioconda",
             "-c",
