@@ -1,6 +1,30 @@
 from distutils.command.build_scripts import first_line_re
 from logging import root
 import os
+import shutil
+import subprocess
+from pathlib import Path
+
+
+def _get_container_runtime():
+    for runtime in ("apptainer", "singularity"):
+        if shutil.which(runtime):
+            return runtime
+    raise RuntimeError("apptainer/singularity executable not found.")
+
+
+def _run(command, cwd=None):
+    subprocess.check_call(command, cwd=str(cwd) if cwd else None)
+
+
+def _ensure_overlay(runtime, overlay_path: Path, size_mb: int = 2048):
+    if overlay_path.exists():
+        return
+
+    _run(
+        [runtime, "overlay", "create", "--fakeroot", "--size", str(size_mb), str(overlay_path)],
+        cwd=overlay_path.parent,
+    )
 
 
 def add_entries_to_DB(root_path, org_name, refseq_code, arch):
@@ -116,14 +140,46 @@ def parse_params(in_flpath):
     return args_str
 
 def update_pangolin(root_path):
-    cd_to_dir= f"cd {root_path}/vfnext/containers/" 
-    run_update = "singularity exec --writable ./pangolin:4.3.sif pangolin --update"
-    os.system(cd_to_dir+';'+run_update)
+    runtime = _get_container_runtime()
+    containers_dir = Path(root_path) / "vfnext" / "containers"
+    container_path = containers_dir / "pangolin:4.3.sif"
+    overlay_path = containers_dir / "pangolin:4.3.overlay"
+
+    _ensure_overlay(runtime, overlay_path)
+    _run(
+        [
+            runtime,
+            "exec",
+            "--fakeroot",
+            "--overlay",
+            str(overlay_path),
+            str(container_path),
+            "pangolin",
+            "--update",
+        ],
+        cwd=containers_dir,
+    )
 
 def update_pangolin_data(root_path):
-    cd_to_dir= f"cd {root_path}/vfnext/containers/" 
-    run_update_data = "singularity exec --writable ./pangolin:4.3.sif pangolin --update-data"
-    os.system(cd_to_dir+';'+run_update_data)
+    runtime = _get_container_runtime()
+    containers_dir = Path(root_path) / "vfnext" / "containers"
+    container_path = containers_dir / "pangolin:4.3.sif"
+    overlay_path = containers_dir / "pangolin:4.3.overlay"
+
+    _ensure_overlay(runtime, overlay_path)
+    _run(
+        [
+            runtime,
+            "exec",
+            "--fakeroot",
+            "--overlay",
+            str(overlay_path),
+            str(container_path),
+            "pangolin",
+            "--update-data",
+        ],
+        cwd=containers_dir,
+    )
 
 def run_vfnext(root_path, params_fl):
     # get nextflow arguments
