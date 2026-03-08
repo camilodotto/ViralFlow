@@ -2,7 +2,7 @@
 
 # get bash script location
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
-cd $SCRIPT_DIR
+cd "$SCRIPT_DIR"
 
 # user input
 organism_name=$1 # Dengue
@@ -50,12 +50,12 @@ mkdir -p $SNPEFF_CTNR/$SNPEFF_PATH/data/$organism_refseq_code
 
 # download fasta
 echo "@ downloading fasta..."
-singularity exec --fakeroot $EFETCH_CTNR efetch -db nucleotide -id $organism_refseq_code -format gb > $SNPEFF_CTNR/$SNPEFF_PATH/data/$organism_refseq_code/genes.gbk
+singularity exec --pwd / --fakeroot "$EFETCH_CTNR" efetch -db nucleotide -id "$organism_refseq_code" -format gb > "$SNPEFF_CTNR/$SNPEFF_PATH/data/$organism_refseq_code/genes.gbk"
 
 # build database
 echo "@ rebuild database"
-singularity exec --fakeroot --writable $SNPEFF_CTNR snpEff build -genbank -v $organism_refseq_code
+singularity exec --pwd / --fakeroot --writable "$SNPEFF_CTNR" snpEff build -genbank -v "$organism_refseq_code"
 
 # update catalog
 echo "@ update snpeff database catalog..."
-singularity exec $SNPEFF_CTNR snpEff databases > snpEff_DB.catalog
+singularity exec --pwd / "$SNPEFF_CTNR" snpEff databases > snpEff_DB.catalog

@@ -1,15 +1,16 @@
 from distutils.command.build_scripts import first_line_re
 from logging import root
 import os
+import subprocess
 
 
 def add_entries_to_DB(root_path, org_name, refseq_code, arch):
     """
     add entries provided to snpeff database
     """
-    run_bash = f"bash {root_path}/vfnext/containers/add_entries_SnpeffDB.sh"
-    print(f"{run_bash} {org_name} {refseq_code} {arch}")
-    os.system(f"{run_bash} {org_name} {refseq_code} {arch}")
+    run_bash = ["bash", f"{root_path}/vfnext/containers/add_entries_SnpeffDB.sh", org_name, refseq_code, arch]
+    print(" ".join(run_bash))
+    subprocess.check_call(run_bash)
 
 def parse_csv(csv_flpath):
     with open(csv_flpath, "r") as csv_fl:
@@ -116,14 +117,14 @@ def parse_params(in_flpath):
     return args_str
 
 def update_pangolin(root_path):
-    cd_to_dir= f"cd {root_path}/vfnext/containers/" 
-    run_update = "singularity exec --writable ./pangolin:4.3.sif pangolin --update"
-    os.system(cd_to_dir+';'+run_update)
+    containers_dir = f"{root_path}/vfnext/containers/"
+    run_update = ["singularity", "exec", "--writable", "./pangolin:4.3.sif", "pangolin", "--update"]
+    subprocess.check_call(run_update, cwd=containers_dir)
 
 def update_pangolin_data(root_path):
-    cd_to_dir= f"cd {root_path}/vfnext/containers/" 
-    run_update_data = "singularity exec --writable ./pangolin:4.3.sif pangolin --update-data"
-    os.system(cd_to_dir+';'+run_update_data)
+    containers_dir = f"{root_path}/vfnext/containers/"
+    run_update_data = ["singularity", "exec", "--writable", "./pangolin:4.3.sif", "pangolin", "--update-data"]
+    subprocess.check_call(run_update_data, cwd=containers_dir)
 
 def run_vfnext(root_path, params_fl):
     # get nextflow arguments
