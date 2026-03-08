@@ -6,7 +6,7 @@ From: debian:11
     
 %post
     apt-get update
-    apt-get install -y curl bzip2
+    apt-get install -y curl bzip2 gcc g++ make python3-dev git
     cd /usr/local
     rmdir bin
     curl -Ls https://micro.mamba.pm/api/micromamba/linux-64/1.5.7 | tar -xvj bin/micromamba
