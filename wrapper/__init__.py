@@ -27,6 +27,11 @@ def _ensure_overlay(runtime, overlay_path: Path, size_mb: int = 2048):
     )
 
 
+def _overlay_path(containers_dir: Path, image_name: str) -> Path:
+    safe_name = image_name.replace(":", "_")
+    return containers_dir / f"{safe_name}.overlay"
+
+
 def add_entries_to_DB(root_path, org_name, refseq_code, arch):
     """
     add entries provided to snpeff database
@@ -143,7 +148,7 @@ def update_pangolin(root_path):
     runtime = _get_container_runtime()
     containers_dir = Path(root_path) / "vfnext" / "containers"
     container_path = containers_dir / "pangolin:4.3.sif"
-    overlay_path = containers_dir / "pangolin:4.3.overlay"
+    overlay_path = _overlay_path(containers_dir, "pangolin:4.3")
 
     _ensure_overlay(runtime, overlay_path)
     _run(
@@ -164,7 +169,7 @@ def update_pangolin_data(root_path):
     runtime = _get_container_runtime()
     containers_dir = Path(root_path) / "vfnext" / "containers"
     container_path = containers_dir / "pangolin:4.3.sif"
-    overlay_path = containers_dir / "pangolin:4.3.overlay"
+    overlay_path = _overlay_path(containers_dir, "pangolin:4.3")
 
     _ensure_overlay(runtime, overlay_path)
     _run(
