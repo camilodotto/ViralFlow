@@ -22,6 +22,11 @@ def ensure_dir(p: Path) -> None:
     p.mkdir(parents=True, exist_ok=True)
 
 
+def cleanup_dir(p: Path) -> None:
+    if p.exists():
+        shutil.rmtree(p)
+
+
 def copy_container(src: Path, dst: Path) -> None:
     """
     Copia container sandbox (dir) ou sif (file) do workdir interno da VM
@@ -202,6 +207,9 @@ def main() -> int:
         print(f" > unsquashfs expected at {unsquashfs_desired_location}\n")
         print(" > After creating the link, rerun 'viralflow -build_containers' to finish setup.")
         return 1
+
+    cleanup_dir(tmpdir)
+    cleanup_dir(workdir)
 
     print("\nAll steps from '-build_containers' completed successfully.")
     print("You can test ViralFlow using the following command:")
