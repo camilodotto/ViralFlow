@@ -118,12 +118,12 @@ def parse_params(in_flpath):
 
 def update_pangolin(root_path):
     containers_dir = f"{root_path}/vfnext/containers/"
-    run_update = ["singularity", "exec", "--writable", "./pangolin:4.3.sif", "pangolin", "--update"]
+    run_update = ["singularity", "exec", "--writable", "./pangolin:4.4.sif", "pangolin", "--update"]
     subprocess.check_call(run_update, cwd=containers_dir)
 
 def update_pangolin_data(root_path):
     containers_dir = f"{root_path}/vfnext/containers/"
-    run_update_data = ["singularity", "exec", "--writable", "./pangolin:4.3.sif", "pangolin", "--update-data"]
+    run_update_data = ["singularity", "exec", "--writable", "./pangolin:4.4.sif", "pangolin", "--update-data"]
     subprocess.check_call(run_update_data, cwd=containers_dir)
 
 def run_vfnext(root_path, params_fl):
