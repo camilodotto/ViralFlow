@@ -17,10 +17,9 @@ From: debian:11
     micromamba activate
     micromamba config append channels conda-forge --env
     micromamba self-update
-    micromamba install -y -c bioconda -c conda-forge python==3.10 pulp==2.7.0 snakemake-minimal==7.29 minimap2 gofasta usher ucsc-fatovcf procps-ng
+    micromamba install -y -c bioconda -c conda-forge python=3.11 usher=0.6.2 snakemake-minimal==9.19.0 minimap2 gofasta ucsc-fatovcf procps-ng git pip
     python -m pip install "setuptools<81" wheel
-    python -m pip install biopython==1.74
-    python -m pip install --no-build-isolation git+https://github.com/cov-lineages/pangolin.git@v4.3.4
+    python -m pip install --no-build-isolation git+https://github.com/cov-lineages/pangolin.git@v4.4
     python -m pip install --no-build-isolation git+https://github.com/cov-lineages/pangolin-data.git
     python -m pip install --no-build-isolation git+https://github.com/cov-lineages/scorpio.git
     python -m pip install --no-build-isolation git+https://github.com/cov-lineages/constellations.git

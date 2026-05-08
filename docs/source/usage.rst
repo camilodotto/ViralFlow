@@ -79,7 +79,7 @@ All steps of ViralFlow are performed in controlled environments, where each tool
 
 .. code-block:: console
 
-   viralflow -build_containers
+   viralflow build-containers
 
 .. _running:
 
@@ -95,7 +95,7 @@ By default, the snpEff tool in ViralFlow is configured with the NC_045512.2 geno
 
 .. code-block:: console
 
-   viralflow -add_entry_to_snpeff --org_name Dengue --genome_code NC_001474.2
+   viralflow add-entry-to-snpeff --org-name Dengue --genome-code NC_001474.2
 
 SARS-CoV-2
 ~~~~~~~~~~
@@ -104,7 +104,7 @@ In this model, the analysis is performed based on the reference genome NC_045512
 
 .. code-block:: console
 
-   viralflow -run --params_file test_files/sars-cov-2.params
+   viralflow run --params-file test_files/sars-cov-2.params
 
 
 Custom
@@ -114,7 +114,7 @@ In this model, the analysis is performed based on the files for the virus that t
 
 .. code-block:: console
 
-   viralflow -run --params_file test_files/denv.params
+   viralflow run --params-file test_files/denv.params
 
 Pangolin update
 ~~~~~~~~~~~~~~~
@@ -124,7 +124,7 @@ Periodically the pangolin tool updates the lineage database, as well as the ushe
 .. code-block:: console
 
    #update the tool and databases
-   viralflow -update_pangolin
+   viralflow update-pangolin
 
    #update only the tool
-   viralflow -update_pangolin_data
+   viralflow update-pangolin-data

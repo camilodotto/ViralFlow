@@ -47,9 +47,9 @@ def add_entries_to_DB(root_path, org_name, refseq_code, arch):
     """
     add entries provided to snpeff database
     """
-    run_bash = f"bash {root_path}/vfnext/containers/add_entries_SnpeffDB.sh"
-    print(f"{run_bash} {org_name} {refseq_code} {arch}")
-    os.system(f"{run_bash} {org_name} {refseq_code} {arch}")
+    run_bash = ["bash", f"{root_path}/vfnext/containers/add_entries_SnpeffDB.sh", org_name, refseq_code, arch]
+    print(" ".join(run_bash))
+    subprocess.check_call(run_bash)
 
 def parse_csv(csv_flpath):
     with open(csv_flpath, "r") as csv_fl:
@@ -158,8 +158,8 @@ def parse_params(in_flpath):
 def update_pangolin(root_path):
     runtime = _get_container_runtime()
     containers_dir = Path(root_path) / "vfnext" / "containers"
-    container_path = containers_dir / "pangolin:4.3.sif"
-    overlay_path = _overlay_path(containers_dir, "pangolin:4.3")
+    container_path = containers_dir / "pangolin:4.4.sif"
+    overlay_path = _overlay_path(containers_dir, "pangolin:4.4")
 
     _ensure_overlay(runtime, overlay_path)
     exec_prefix = _pangolin_exec_prefix(runtime, overlay_path, container_path)
@@ -221,8 +221,8 @@ def update_pangolin(root_path):
 def update_pangolin_data(root_path):
     runtime = _get_container_runtime()
     containers_dir = Path(root_path) / "vfnext" / "containers"
-    container_path = containers_dir / "pangolin:4.3.sif"
-    overlay_path = _overlay_path(containers_dir, "pangolin:4.3")
+    container_path = containers_dir / "pangolin:4.4.sif"
+    overlay_path = _overlay_path(containers_dir, "pangolin:4.4")
 
     _ensure_overlay(runtime, overlay_path)
     _run(

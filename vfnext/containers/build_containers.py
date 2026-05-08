@@ -12,7 +12,6 @@ from typing import Dict, List, Tuple
 def eprint(msg: str) -> None:
     print(msg, file=sys.stderr)
 
-
 def path_exists_as_container(p: Path) -> bool:
     # Pode ser sandbox (diretório) ou sif (arquivo)
     return p.is_dir() or p.is_file()
@@ -81,7 +80,7 @@ def main() -> int:
 
     # Containers que o script já construía
     specs: List[Tuple[str, str]] = [
-        ("pangolin:4.3.sif", f"def_files/{arch}/Singularity_pangolin"),
+        ("pangolin:4.4.sif", f"def_files/{arch}/Singularity_pangolin"),
         ("snpeff:5.0.sif",   f"def_files/{arch}/Singularity_snpEff"),
     ]
 
@@ -205,15 +204,15 @@ def main() -> int:
         print(" > If that does not solve it, try:")
         print(" > sudo ln -s /usr/bin/unsquashfs /usr/local/bin/unsquashfs\n")
         print(f" > unsquashfs expected at {unsquashfs_desired_location}\n")
-        print(" > After creating the link, rerun 'viralflow -build_containers' to finish setup.")
+        print(" > After creating the link, rerun 'viralflow build-containers' to finish setup.")
         return 1
 
     cleanup_dir(tmpdir)
     cleanup_dir(workdir)
 
-    print("\nAll steps from '-build_containers' completed successfully.")
+    print("\nAll steps from 'build-containers' completed successfully.")
     print("You can test ViralFlow using the following command:")
-    print(" > viralflow -run --params_file test_files/sars-cov-2.params")
+    print(" > viralflow run --params-file test_files/sars-cov-2.params")
     return 0
 
 
