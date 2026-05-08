@@ -1,0 +1,9 @@
+{
+    "viralFlowCmdParams" : {
+        "run": "run",
+        "updatePangolin": "update-pangolin",
+        "updatePangolinData": "update-pangolin-data",
+        "addEntryToSnpeff": "add-entry-to-snpeff",
+        "buildContainers": "build-containers"
+    }
+}
