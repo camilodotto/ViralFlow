@@ -4,9 +4,7 @@ from ast import Assert
 import math
 import os
 import pandas as pd
-import struct
 import sys
-import zlib
 from Bio import SeqIO
 import argparse
 
@@ -416,65 +414,9 @@ def _linear_regression(points):
     return slope, intercept
 
 
-def _write_png(path, width, height, draw_callback):
-    """
-    Write a lightweight RGB PNG using only the Python standard library.
-    """
-    pixels = bytearray([255, 255, 255] * width * height)
-
-    def set_pixel(x, y, color):
-        x = int(round(x))
-        y = int(round(y))
-        if x < 0 or x >= width or y < 0 or y >= height:
-            return
-        idx = ((y * width) + x) * 3
-        pixels[idx:idx + 3] = bytes(color)
-
-    def draw_line(x0, y0, x1, y1, color, thickness=1):
-        steps = int(max(abs(x1 - x0), abs(y1 - y0))) or 1
-        radius = max(0, int(thickness // 2))
-        for step in range(steps + 1):
-            t = step / steps
-            x = x0 + ((x1 - x0) * t)
-            y = y0 + ((y1 - y0) * t)
-            for dx in range(-radius, radius + 1):
-                for dy in range(-radius, radius + 1):
-                    set_pixel(x + dx, y + dy, color)
-
-    def draw_circle(cx, cy, radius, color):
-        r = int(radius)
-        for y in range(int(cy - r), int(cy + r) + 1):
-            for x in range(int(cx - r), int(cx + r) + 1):
-                if ((x - cx) ** 2) + ((y - cy) ** 2) <= radius ** 2:
-                    set_pixel(x, y, color)
-
-    draw_callback(draw_line, draw_circle)
-
-    raw = bytearray()
-    row_size = width * 3
-    for y in range(height):
-        raw.append(0)
-        start = y * row_size
-        raw.extend(pixels[start:start + row_size])
-
-    def chunk(tag, data):
-        return (
-            struct.pack("!I", len(data)) +
-            tag +
-            data +
-            struct.pack("!I", zlib.crc32(tag + data) & 0xffffffff)
-        )
-
-    with open(path, "wb") as png:
-        png.write(b"\x89PNG\r\n\x1a\n")
-        png.write(chunk(b"IHDR", struct.pack("!IIBBBBB", width, height, 8, 2, 0, 0, 0)))
-        png.write(chunk(b"IDAT", zlib.compress(bytes(raw), 9)))
-        png.write(chunk(b"IEND", b""))
-
-
 def generate_coverage_plot(short_summary_df, outdir):
     """
-    Generate SVG and PNG plots from short_summary coverage columns.
+    Generate an SVG plot from short_summary coverage columns.
     """
     required_columns = {"coverage_breadth", "mean_depth_coverage"}
     if not required_columns.issubset(short_summary_df.columns):
@@ -562,7 +504,7 @@ def generate_coverage_plot(short_summary_df, outdir):
     .tick {{ font: 16px Arial, Helvetica, sans-serif; fill: {text}; }}
   </style>
   <rect width="100%" height="100%" fill="white" />
-  <text x="{width / 2}" y="42" text-anchor="middle" class="title">Relação cobertura vertical e horizontal</text>
+  <text x="{width / 2}" y="42" text-anchor="middle" class="title">Vertical and horizontal coverage relationship</text>
   {''.join(svg_ticks)}
   <line x1="{left}" y1="{top + plot_height}" x2="{left + plot_width}" y2="{top + plot_height}" stroke="{axis_green}" stroke-width="4" />
   <line x1="{left}" y1="{top + plot_height}" x2="{left}" y2="{top}" stroke="{axis_green}" stroke-width="4" />
@@ -571,38 +513,15 @@ def generate_coverage_plot(short_summary_df, outdir):
   {line_svg}
   {''.join(circles)}
   <text x="{left + (plot_width / 2)}" y="{height - 34}" text-anchor="middle" class="label">Coverage breadth (%)</text>
-  <text transform="translate(34 {top + (plot_height / 2)}) rotate(-90)" text-anchor="middle" class="label">Coverage Depth</text>
+  <text transform="translate(34 {top + (plot_height / 2)}) rotate(-90)" text-anchor="middle" class="label">Mean coverage depth</text>
 </svg>
 '''
 
     svg_path = os.path.join(outdir, "coverage_plot.svg")
-    png_path = os.path.join(outdir, "coverage_plot.png")
     with open(svg_path, "w") as svg_file:
         svg_file.write(svg)
 
-    def draw_png(draw_line, draw_circle):
-        axis_rgb = (139, 220, 154)
-        point_rgb = (200, 68, 58)
-        grid_rgb = (233, 245, 236)
-        for tick in x_ticks:
-            if tick <= x_max:
-                draw_line(sx(tick), top, sx(tick), top + plot_height, grid_rgb, 1)
-        for tick in y_ticks:
-            draw_line(left, sy(tick), left + plot_width, sy(tick), grid_rgb, 1)
-        draw_line(left, top + plot_height, left + plot_width, top + plot_height, axis_rgb, 4)
-        draw_line(left, top + plot_height, left, top, axis_rgb, 4)
-        draw_line(left + plot_width - 18, top + plot_height - 12, left + plot_width, top + plot_height, axis_rgb, 4)
-        draw_line(left + plot_width - 18, top + plot_height + 12, left + plot_width, top + plot_height, axis_rgb, 4)
-        draw_line(left - 12, top + 18, left, top, axis_rgb, 4)
-        draw_line(left + 12, top + 18, left, top, axis_rgb, 4)
-        if fit is not None:
-            draw_line(sx(x_min), sy(y_start), sx(x_max), sy(y_end), point_rgb, 5)
-        for x, y in points:
-            draw_circle(sx(x), sy(y), 5, point_rgb)
-
-    _write_png(png_path, width, height, draw_png)
     print(f"  > {svg_path}")
-    print(f"  > {png_path}")
 
 # -------------------------------------------------------------------------------------
 def __parse_wgs(wgs_flpth,cod):
