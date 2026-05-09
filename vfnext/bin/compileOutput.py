@@ -414,6 +414,15 @@ def _linear_regression(points):
     return slope, intercept
 
 
+def _coverage_breadth_percentages(series):
+    values = pd.to_numeric(series, errors="coerce").dropna().tolist()
+    if len(values) == 0:
+        return []
+    if max(values) <= 1:
+        return [value * 100 for value in values]
+    return values
+
+
 def generate_coverage_plot(short_summary_df, outdir):
     """
     Generate an SVG plot from short_summary coverage columns.
@@ -433,9 +442,7 @@ def generate_coverage_plot(short_summary_df, outdir):
         print("WARN: coverage plot was not generated. No numeric data available.")
         return
 
-    x_values = plot_df["coverage_breadth"].tolist()
-    if max(x_values) <= 1:
-        x_values = [x * 100 for x in x_values]
+    x_values = _coverage_breadth_percentages(plot_df["coverage_breadth"])
     y_values = plot_df["mean_depth_coverage"].tolist()
     points = list(zip(x_values, y_values))
 
@@ -518,6 +525,101 @@ def generate_coverage_plot(short_summary_df, outdir):
 '''
 
     svg_path = os.path.join(outdir, "coverage_plot.svg")
+    with open(svg_path, "w") as svg_file:
+        svg_file.write(svg)
+
+    print(f"  > {svg_path}")
+
+
+def generate_coverage_breadth_groups_plot(short_summary_df, outdir):
+    """
+    Generate an SVG bar plot with genome counts by coverage breadth range.
+    """
+    if "coverage_breadth" not in short_summary_df.columns:
+        print("WARN: coverage breadth groups plot was not generated. Missing column: coverage_breadth")
+        return
+
+    x_values = _coverage_breadth_percentages(short_summary_df["coverage_breadth"])
+    if len(x_values) == 0:
+        print("WARN: coverage breadth groups plot was not generated. No numeric data available.")
+        return
+
+    groups = [
+        ("0-30%", lambda value: 0 <= value <= 30),
+        ("31-69%", lambda value: 30 < value < 70),
+        ("70-100%", lambda value: 70 <= value <= 100),
+    ]
+    counts = []
+    for _, in_group in groups:
+        counts.append(sum(1 for value in x_values if in_group(value)))
+
+    width = 960
+    height = 640
+    left = 120
+    right = 48
+    top = 72
+    bottom = 112
+    plot_width = width - left - right
+    plot_height = height - top - bottom
+    axis_color = "#000000"
+    bar_color = "#c8443a"
+    grid = "#e9f5ec"
+    text = "#4f5b57"
+
+    y_max = _nice_axis_max(max(counts) * 1.15)
+    if y_max < 5:
+        y_max = 5
+
+    def sy(y):
+        return top + plot_height - (y / y_max * plot_height)
+
+    y_ticks = [i * y_max / 5 for i in range(0, 6)]
+    svg_ticks = []
+    for tick in y_ticks:
+        svg_ticks.append(
+            f'<line x1="{left}" y1="{sy(tick):.2f}" x2="{left + plot_width}" y2="{sy(tick):.2f}" stroke="{grid}" />'
+            f'<text x="{left - 16}" y="{sy(tick) + 5:.2f}" text-anchor="end" class="tick">{tick:.0f}</text>'
+        )
+
+    slot_width = plot_width / len(groups)
+    bar_width = slot_width * 0.46
+    bars = []
+    labels = []
+    for idx, ((label, _), count) in enumerate(zip(groups, counts)):
+        center_x = left + (slot_width * idx) + (slot_width / 2)
+        bar_height = plot_height - (sy(count) - top)
+        x = center_x - (bar_width / 2)
+        y = sy(count)
+        bars.append(
+            f'<rect x="{x:.2f}" y="{y:.2f}" width="{bar_width:.2f}" height="{bar_height:.2f}" '
+            f'fill="{bar_color}" fill-opacity="0.18" stroke="{bar_color}" stroke-width="4" />'
+        )
+        labels.append(
+            f'<text x="{center_x:.2f}" y="{top + plot_height + 36}" text-anchor="middle" class="range-label">{label}</text>'
+        )
+
+    svg = f'''<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">
+  <style>
+    .title {{ font: 700 34px Arial, Helvetica, sans-serif; fill: {axis_color}; }}
+    .label {{ font: 700 32px Arial, Helvetica, sans-serif; fill: {axis_color}; }}
+    .tick {{ font: 16px Arial, Helvetica, sans-serif; fill: {text}; }}
+    .range-label {{ font: 700 24px Arial, Helvetica, sans-serif; fill: {axis_color}; }}
+  </style>
+  <rect width="100%" height="100%" fill="white" />
+  <text x="{width / 2}" y="42" text-anchor="middle" class="title">Coverage breadth ranges</text>
+  {''.join(svg_ticks)}
+  <line x1="{left}" y1="{top + plot_height}" x2="{left + plot_width}" y2="{top + plot_height}" stroke="{axis_color}" stroke-width="4" />
+  <line x1="{left}" y1="{top + plot_height}" x2="{left}" y2="{top}" stroke="{axis_color}" stroke-width="4" />
+  <path d="M {left + plot_width - 18} {top + plot_height - 12} L {left + plot_width} {top + plot_height} L {left + plot_width - 18} {top + plot_height + 12}" fill="none" stroke="{axis_color}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" />
+  <path d="M {left - 12} {top + 18} L {left} {top} L {left + 12} {top + 18}" fill="none" stroke="{axis_color}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" />
+  {''.join(bars)}
+  {''.join(labels)}
+  <text x="{left + (plot_width / 2)}" y="{height - 34}" text-anchor="middle" class="label">Coverage breadth (%)</text>
+  <text transform="translate(34 {top + (plot_height / 2)}) rotate(-90)" text-anchor="middle" class="label">Number of genomes</text>
+</svg>
+'''
+
+    svg_path = os.path.join(outdir, "coverage_breadth_groups_plot.svg")
     with open(svg_path, "w") as svg_file:
         svg_file.write(svg)
 
@@ -612,6 +714,7 @@ def get_lineages_summary(wgs_csv, outdir, multifasta, virus_tag, pango_csv=None)
                 short_summary_df = short_summary_df.merge(cov_df, on="cod")
                 short_summary_df.to_csv(f"{outdir}short_summary.csv")
                 generate_coverage_plot(short_summary_df, outdir)
+                generate_coverage_breadth_groups_plot(short_summary_df, outdir)
             else:
                 print(f"WARN: {multifasta} was not found. No short_summary will be written.")
 
@@ -631,6 +734,7 @@ def get_lineages_summary(wgs_csv, outdir, multifasta, virus_tag, pango_csv=None)
 
                 short_summary_df.to_csv(f"{outdir}short_summary.csv")
                 generate_coverage_plot(short_summary_df, outdir)
+                generate_coverage_breadth_groups_plot(short_summary_df, outdir)
 
             else:
                 print(f"WARN: {multifasta} was not found. No short_summary will be written.")
