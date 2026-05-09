@@ -1,9 +1,12 @@
 #!/usr/bin/env python
 
 from ast import Assert
+import math
 import os
 import pandas as pd
+import struct
 import sys
+import zlib
 from Bio import SeqIO
 import argparse
 
@@ -370,6 +373,237 @@ def loadCoverageDF(multifasta_path):
         dct_lst.append({"cod": cod, "coverage_breadth": cov})
     return pd.DataFrame(dct_lst)
 
+
+# --- coverage summary plot ---------------------------------------------------
+def _nice_axis_max(value):
+    """
+    Return a readable upper bound for a numeric axis.
+    """
+    if value <= 0 or math.isnan(value):
+        return 1
+
+    magnitude = 10 ** math.floor(math.log10(value))
+    normalized = value / magnitude
+    if normalized <= 1:
+        nice = 1
+    elif normalized <= 2:
+        nice = 2
+    elif normalized <= 5:
+        nice = 5
+    else:
+        nice = 10
+    return nice * magnitude
+
+
+def _linear_regression(points):
+    """
+    Fit a simple y = ax + b regression line for the plotted points.
+    """
+    if len(points) < 2:
+        return None
+
+    n = len(points)
+    sum_x = sum(point[0] for point in points)
+    sum_y = sum(point[1] for point in points)
+    sum_xx = sum(point[0] ** 2 for point in points)
+    sum_xy = sum(point[0] * point[1] for point in points)
+    denominator = (n * sum_xx) - (sum_x ** 2)
+    if denominator == 0:
+        return None
+
+    slope = ((n * sum_xy) - (sum_x * sum_y)) / denominator
+    intercept = (sum_y - (slope * sum_x)) / n
+    return slope, intercept
+
+
+def _write_png(path, width, height, draw_callback):
+    """
+    Write a lightweight RGB PNG using only the Python standard library.
+    """
+    pixels = bytearray([255, 255, 255] * width * height)
+
+    def set_pixel(x, y, color):
+        x = int(round(x))
+        y = int(round(y))
+        if x < 0 or x >= width or y < 0 or y >= height:
+            return
+        idx = ((y * width) + x) * 3
+        pixels[idx:idx + 3] = bytes(color)
+
+    def draw_line(x0, y0, x1, y1, color, thickness=1):
+        steps = int(max(abs(x1 - x0), abs(y1 - y0))) or 1
+        radius = max(0, int(thickness // 2))
+        for step in range(steps + 1):
+            t = step / steps
+            x = x0 + ((x1 - x0) * t)
+            y = y0 + ((y1 - y0) * t)
+            for dx in range(-radius, radius + 1):
+                for dy in range(-radius, radius + 1):
+                    set_pixel(x + dx, y + dy, color)
+
+    def draw_circle(cx, cy, radius, color):
+        r = int(radius)
+        for y in range(int(cy - r), int(cy + r) + 1):
+            for x in range(int(cx - r), int(cx + r) + 1):
+                if ((x - cx) ** 2) + ((y - cy) ** 2) <= radius ** 2:
+                    set_pixel(x, y, color)
+
+    draw_callback(draw_line, draw_circle)
+
+    raw = bytearray()
+    row_size = width * 3
+    for y in range(height):
+        raw.append(0)
+        start = y * row_size
+        raw.extend(pixels[start:start + row_size])
+
+    def chunk(tag, data):
+        return (
+            struct.pack("!I", len(data)) +
+            tag +
+            data +
+            struct.pack("!I", zlib.crc32(tag + data) & 0xffffffff)
+        )
+
+    with open(path, "wb") as png:
+        png.write(b"\x89PNG\r\n\x1a\n")
+        png.write(chunk(b"IHDR", struct.pack("!IIBBBBB", width, height, 8, 2, 0, 0, 0)))
+        png.write(chunk(b"IDAT", zlib.compress(bytes(raw), 9)))
+        png.write(chunk(b"IEND", b""))
+
+
+def generate_coverage_plot(short_summary_df, outdir):
+    """
+    Generate SVG and PNG plots from short_summary coverage columns.
+    """
+    required_columns = {"coverage_breadth", "mean_depth_coverage"}
+    if not required_columns.issubset(short_summary_df.columns):
+        missing = ", ".join(sorted(required_columns - set(short_summary_df.columns)))
+        print(f"WARN: coverage plot was not generated. Missing columns: {missing}")
+        return
+
+    plot_df = short_summary_df[["coverage_breadth", "mean_depth_coverage"]].copy()
+    plot_df["coverage_breadth"] = pd.to_numeric(plot_df["coverage_breadth"], errors="coerce")
+    plot_df["mean_depth_coverage"] = pd.to_numeric(plot_df["mean_depth_coverage"], errors="coerce")
+    plot_df = plot_df.dropna()
+
+    if len(plot_df) == 0:
+        print("WARN: coverage plot was not generated. No numeric data available.")
+        return
+
+    x_values = plot_df["coverage_breadth"].tolist()
+    if max(x_values) <= 1:
+        x_values = [x * 100 for x in x_values]
+    y_values = plot_df["mean_depth_coverage"].tolist()
+    points = list(zip(x_values, y_values))
+
+    width = 960
+    height = 640
+    left = 120
+    right = 48
+    top = 72
+    bottom = 112
+    plot_width = width - left - right
+    plot_height = height - top - bottom
+    axis_green = "#8bdc9a"
+    label_green = "#70e83b"
+    point_red = "#c8443a"
+    grid = "#e9f5ec"
+    text = "#4f5b57"
+
+    x_min = 0
+    x_max = max(100, _nice_axis_max(max(x_values)))
+    y_min = 0
+    y_max = _nice_axis_max(max(y_values) * 1.08)
+
+    def sx(x):
+        return left + ((x - x_min) / (x_max - x_min) * plot_width)
+
+    def sy(y):
+        return top + plot_height - ((y - y_min) / (y_max - y_min) * plot_height)
+
+    circles = []
+    for x, y in points:
+        circles.append(
+            f'<circle cx="{sx(x):.2f}" cy="{sy(y):.2f}" r="5" fill="{point_red}" fill-opacity="0.82" />'
+        )
+
+    line_svg = ""
+    fit = _linear_regression(points)
+    if fit is not None:
+        slope, intercept = fit
+        y_start = max(y_min, min(y_max, (slope * x_min) + intercept))
+        y_end = max(y_min, min(y_max, (slope * x_max) + intercept))
+        line_svg = (
+            f'<line x1="{sx(x_min):.2f}" y1="{sy(y_start):.2f}" '
+            f'x2="{sx(x_max):.2f}" y2="{sy(y_end):.2f}" '
+            f'stroke="{point_red}" stroke-width="5" stroke-linecap="round" />'
+        )
+
+    x_ticks = [0, 25, 50, 75, 100]
+    y_ticks = [i * y_max / 5 for i in range(0, 6)]
+    svg_ticks = []
+    for tick in x_ticks:
+        if tick <= x_max:
+            svg_ticks.append(
+                f'<line x1="{sx(tick):.2f}" y1="{top}" x2="{sx(tick):.2f}" y2="{top + plot_height}" stroke="{grid}" />'
+                f'<text x="{sx(tick):.2f}" y="{top + plot_height + 32}" text-anchor="middle" class="tick">{tick}%</text>'
+            )
+    for tick in y_ticks:
+        svg_ticks.append(
+            f'<line x1="{left}" y1="{sy(tick):.2f}" x2="{left + plot_width}" y2="{sy(tick):.2f}" stroke="{grid}" />'
+            f'<text x="{left - 16}" y="{sy(tick) + 5:.2f}" text-anchor="end" class="tick">{tick:.0f}</text>'
+        )
+
+    svg = f'''<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">
+  <style>
+    .title {{ font: 700 34px Arial, Helvetica, sans-serif; fill: {axis_green}; }}
+    .label {{ font: 700 32px Arial, Helvetica, sans-serif; fill: {label_green}; }}
+    .tick {{ font: 16px Arial, Helvetica, sans-serif; fill: {text}; }}
+  </style>
+  <rect width="100%" height="100%" fill="white" />
+  <text x="{width / 2}" y="42" text-anchor="middle" class="title">Relação cobertura vertical e horizontal</text>
+  {''.join(svg_ticks)}
+  <line x1="{left}" y1="{top + plot_height}" x2="{left + plot_width}" y2="{top + plot_height}" stroke="{axis_green}" stroke-width="4" />
+  <line x1="{left}" y1="{top + plot_height}" x2="{left}" y2="{top}" stroke="{axis_green}" stroke-width="4" />
+  <path d="M {left + plot_width - 18} {top + plot_height - 12} L {left + plot_width} {top + plot_height} L {left + plot_width - 18} {top + plot_height + 12}" fill="none" stroke="{axis_green}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" />
+  <path d="M {left - 12} {top + 18} L {left} {top} L {left + 12} {top + 18}" fill="none" stroke="{axis_green}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" />
+  {line_svg}
+  {''.join(circles)}
+  <text x="{left + (plot_width / 2)}" y="{height - 34}" text-anchor="middle" class="label">Coverage breadth (%)</text>
+  <text transform="translate(34 {top + (plot_height / 2)}) rotate(-90)" text-anchor="middle" class="label">Coverage Depth</text>
+</svg>
+'''
+
+    svg_path = os.path.join(outdir, "coverage_plot.svg")
+    png_path = os.path.join(outdir, "coverage_plot.png")
+    with open(svg_path, "w") as svg_file:
+        svg_file.write(svg)
+
+    def draw_png(draw_line, draw_circle):
+        axis_rgb = (139, 220, 154)
+        point_rgb = (200, 68, 58)
+        grid_rgb = (233, 245, 236)
+        for tick in x_ticks:
+            if tick <= x_max:
+                draw_line(sx(tick), top, sx(tick), top + plot_height, grid_rgb, 1)
+        for tick in y_ticks:
+            draw_line(left, sy(tick), left + plot_width, sy(tick), grid_rgb, 1)
+        draw_line(left, top + plot_height, left + plot_width, top + plot_height, axis_rgb, 4)
+        draw_line(left, top + plot_height, left, top, axis_rgb, 4)
+        draw_line(left + plot_width - 18, top + plot_height - 12, left + plot_width, top + plot_height, axis_rgb, 4)
+        draw_line(left + plot_width - 18, top + plot_height + 12, left + plot_width, top + plot_height, axis_rgb, 4)
+        draw_line(left - 12, top + 18, left, top, axis_rgb, 4)
+        draw_line(left + 12, top + 18, left, top, axis_rgb, 4)
+        if fit is not None:
+            draw_line(sx(x_min), sy(y_start), sx(x_max), sy(y_end), point_rgb, 5)
+        for x, y in points:
+            draw_circle(sx(x), sy(y), 5, point_rgb)
+
+    _write_png(png_path, width, height, draw_png)
+    print(f"  > {svg_path}")
+    print(f"  > {png_path}")
+
 # -------------------------------------------------------------------------------------
 def __parse_wgs(wgs_flpth,cod):
 
@@ -458,6 +692,7 @@ def get_lineages_summary(wgs_csv, outdir, multifasta, virus_tag, pango_csv=None)
                 cov_df = loadCoverageDF(multifasta)
                 short_summary_df = short_summary_df.merge(cov_df, on="cod")
                 short_summary_df.to_csv(f"{outdir}short_summary.csv")
+                generate_coverage_plot(short_summary_df, outdir)
             else:
                 print(f"WARN: {multifasta} was not found. No short_summary will be written.")
 
@@ -476,6 +711,7 @@ def get_lineages_summary(wgs_csv, outdir, multifasta, virus_tag, pango_csv=None)
                     short_summary_df["lineage"] = None
 
                 short_summary_df.to_csv(f"{outdir}short_summary.csv")
+                generate_coverage_plot(short_summary_df, outdir)
 
             else:
                 print(f"WARN: {multifasta} was not found. No short_summary will be written.")
