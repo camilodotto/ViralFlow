@@ -447,8 +447,8 @@ def generate_coverage_plot(short_summary_df, outdir):
     bottom = 112
     plot_width = width - left - right
     plot_height = height - top - bottom
-    axis_green = "#8bdc9a"
-    label_green = "#70e83b"
+    axis_color = "#000000"
+    label_color = "#000000"
     point_red = "#c8443a"
     grid = "#e9f5ec"
     text = "#4f5b57"
@@ -499,17 +499,17 @@ def generate_coverage_plot(short_summary_df, outdir):
 
     svg = f'''<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">
   <style>
-    .title {{ font: 700 34px Arial, Helvetica, sans-serif; fill: {axis_green}; }}
-    .label {{ font: 700 32px Arial, Helvetica, sans-serif; fill: {label_green}; }}
+    .title {{ font: 700 34px Arial, Helvetica, sans-serif; fill: {axis_color}; }}
+    .label {{ font: 700 32px Arial, Helvetica, sans-serif; fill: {label_color}; }}
     .tick {{ font: 16px Arial, Helvetica, sans-serif; fill: {text}; }}
   </style>
   <rect width="100%" height="100%" fill="white" />
   <text x="{width / 2}" y="42" text-anchor="middle" class="title">Vertical and horizontal coverage relationship</text>
   {''.join(svg_ticks)}
-  <line x1="{left}" y1="{top + plot_height}" x2="{left + plot_width}" y2="{top + plot_height}" stroke="{axis_green}" stroke-width="4" />
-  <line x1="{left}" y1="{top + plot_height}" x2="{left}" y2="{top}" stroke="{axis_green}" stroke-width="4" />
-  <path d="M {left + plot_width - 18} {top + plot_height - 12} L {left + plot_width} {top + plot_height} L {left + plot_width - 18} {top + plot_height + 12}" fill="none" stroke="{axis_green}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" />
-  <path d="M {left - 12} {top + 18} L {left} {top} L {left + 12} {top + 18}" fill="none" stroke="{axis_green}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" />
+  <line x1="{left}" y1="{top + plot_height}" x2="{left + plot_width}" y2="{top + plot_height}" stroke="{axis_color}" stroke-width="4" />
+  <line x1="{left}" y1="{top + plot_height}" x2="{left}" y2="{top}" stroke="{axis_color}" stroke-width="4" />
+  <path d="M {left + plot_width - 18} {top + plot_height - 12} L {left + plot_width} {top + plot_height} L {left + plot_width - 18} {top + plot_height + 12}" fill="none" stroke="{axis_color}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" />
+  <path d="M {left - 12} {top + 18} L {left} {top} L {left + 12} {top + 18}" fill="none" stroke="{axis_color}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" />
   {line_svg}
   {''.join(circles)}
   <text x="{left + (plot_width / 2)}" y="{height - 34}" text-anchor="middle" class="label">Coverage breadth (%)</text>
