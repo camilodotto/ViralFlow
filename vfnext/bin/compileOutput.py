@@ -423,6 +423,16 @@ def _coverage_breadth_percentages(series):
     return values
 
 
+def _svg_escape(value):
+    return (
+        str(value)
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+    )
+
+
 def generate_coverage_plot(short_summary_df, outdir):
     """
     Generate an SVG plot from short_summary coverage columns.
@@ -531,24 +541,19 @@ def generate_coverage_plot(short_summary_df, outdir):
     print(f"  > {svg_path}")
 
 
-def generate_coverage_breadth_groups_plot(short_summary_df, outdir):
+def _generate_coverage_breadth_range_plot(short_summary_df, outdir, groups, filename, title, label_font_size=24):
     """
-    Generate an SVG bar plot with genome counts by coverage breadth range.
+    Generate an SVG bar plot with genome counts by coverage breadth ranges.
     """
     if "coverage_breadth" not in short_summary_df.columns:
-        print("WARN: coverage breadth groups plot was not generated. Missing column: coverage_breadth")
+        print(f"WARN: {filename} was not generated. Missing column: coverage_breadth")
         return
 
     x_values = _coverage_breadth_percentages(short_summary_df["coverage_breadth"])
     if len(x_values) == 0:
-        print("WARN: coverage breadth groups plot was not generated. No numeric data available.")
+        print(f"WARN: {filename} was not generated. No numeric data available.")
         return
 
-    groups = [
-        ("0-30%", lambda value: 0 <= value <= 30),
-        ("31-69%", lambda value: 30 < value < 70),
-        ("70-100%", lambda value: 70 <= value <= 100),
-    ]
     counts = []
     for _, in_group in groups:
         counts.append(sum(1 for value in x_values if in_group(value)))
@@ -558,7 +563,7 @@ def generate_coverage_breadth_groups_plot(short_summary_df, outdir):
     left = 120
     right = 48
     top = 72
-    bottom = 112
+    bottom = 150
     plot_width = width - left - right
     plot_height = height - top - bottom
     axis_color = "#000000"
@@ -583,6 +588,8 @@ def generate_coverage_breadth_groups_plot(short_summary_df, outdir):
 
     slot_width = plot_width / len(groups)
     bar_width = slot_width * 0.46
+    if len(groups) > 5:
+        bar_width = slot_width * 0.58
     bars = []
     labels = []
     for idx, ((label, _), count) in enumerate(zip(groups, counts)):
@@ -595,7 +602,7 @@ def generate_coverage_breadth_groups_plot(short_summary_df, outdir):
             f'fill="{bar_color}" fill-opacity="0.18" stroke="{bar_color}" stroke-width="4" />'
         )
         labels.append(
-            f'<text x="{center_x:.2f}" y="{top + plot_height + 36}" text-anchor="middle" class="range-label">{label}</text>'
+            f'<text x="{center_x:.2f}" y="{top + plot_height + 36}" text-anchor="middle" class="range-label">{_svg_escape(label)}</text>'
         )
 
     svg = f'''<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">
@@ -603,10 +610,10 @@ def generate_coverage_breadth_groups_plot(short_summary_df, outdir):
     .title {{ font: 700 34px Arial, Helvetica, sans-serif; fill: {axis_color}; }}
     .label {{ font: 700 32px Arial, Helvetica, sans-serif; fill: {axis_color}; }}
     .tick {{ font: 16px Arial, Helvetica, sans-serif; fill: {text}; }}
-    .range-label {{ font: 700 24px Arial, Helvetica, sans-serif; fill: {axis_color}; }}
+    .range-label {{ font: 700 {label_font_size}px Arial, Helvetica, sans-serif; fill: {axis_color}; }}
   </style>
   <rect width="100%" height="100%" fill="white" />
-  <text x="{width / 2}" y="42" text-anchor="middle" class="title">Coverage breadth ranges</text>
+  <text x="{width / 2}" y="42" text-anchor="middle" class="title">{_svg_escape(title)}</text>
   {''.join(svg_ticks)}
   <line x1="{left}" y1="{top + plot_height}" x2="{left + plot_width}" y2="{top + plot_height}" stroke="{axis_color}" stroke-width="4" />
   <line x1="{left}" y1="{top + plot_height}" x2="{left}" y2="{top}" stroke="{axis_color}" stroke-width="4" />
@@ -619,11 +626,44 @@ def generate_coverage_breadth_groups_plot(short_summary_df, outdir):
 </svg>
 '''
 
-    svg_path = os.path.join(outdir, "coverage_breadth_groups_plot.svg")
+    svg_path = os.path.join(outdir, filename)
     with open(svg_path, "w") as svg_file:
         svg_file.write(svg)
 
     print(f"  > {svg_path}")
+
+
+def generate_coverage_breadth_summary_plot(short_summary_df, outdir):
+    groups = [
+        ("0-30%", lambda value: 0 <= value <= 30),
+        (">30-<70%", lambda value: 30 < value < 70),
+        ("70-100%", lambda value: 70 <= value <= 100),
+    ]
+    _generate_coverage_breadth_range_plot(
+        short_summary_df,
+        outdir,
+        groups,
+        "coverage_breadth_summary_plot.svg",
+        "Coverage breadth summary",
+        label_font_size=24,
+    )
+
+
+def generate_coverage_breadth_decile_plot(short_summary_df, outdir):
+    groups = []
+    for start in range(0, 90, 10):
+        end = start + 10
+        groups.append((f"{start}-<{end}%", lambda value, start=start, end=end: start <= value < end))
+    groups.append(("90-100%", lambda value: 90 <= value <= 100))
+
+    _generate_coverage_breadth_range_plot(
+        short_summary_df,
+        outdir,
+        groups,
+        "coverage_breadth_decile_plot.svg",
+        "Coverage breadth deciles",
+        label_font_size=14,
+    )
 
 # -------------------------------------------------------------------------------------
 def __parse_wgs(wgs_flpth,cod):
@@ -714,7 +754,8 @@ def get_lineages_summary(wgs_csv, outdir, multifasta, virus_tag, pango_csv=None)
                 short_summary_df = short_summary_df.merge(cov_df, on="cod")
                 short_summary_df.to_csv(f"{outdir}short_summary.csv")
                 generate_coverage_plot(short_summary_df, outdir)
-                generate_coverage_breadth_groups_plot(short_summary_df, outdir)
+                generate_coverage_breadth_summary_plot(short_summary_df, outdir)
+                generate_coverage_breadth_decile_plot(short_summary_df, outdir)
             else:
                 print(f"WARN: {multifasta} was not found. No short_summary will be written.")
 
@@ -734,7 +775,8 @@ def get_lineages_summary(wgs_csv, outdir, multifasta, virus_tag, pango_csv=None)
 
                 short_summary_df.to_csv(f"{outdir}short_summary.csv")
                 generate_coverage_plot(short_summary_df, outdir)
-                generate_coverage_breadth_groups_plot(short_summary_df, outdir)
+                generate_coverage_breadth_summary_plot(short_summary_df, outdir)
+                generate_coverage_breadth_decile_plot(short_summary_df, outdir)
 
             else:
                 print(f"WARN: {multifasta} was not found. No short_summary will be written.")
