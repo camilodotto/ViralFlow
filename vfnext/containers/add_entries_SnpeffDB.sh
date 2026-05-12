@@ -45,7 +45,7 @@ TMP_DIR=$(mktemp -d)
 trap 'rm -rf "$TMP_DIR"' EXIT
 TMP_GENBANK="$TMP_DIR/genes.gbk"
 
-SNPEFF_PATH=$("$CONTAINER_RUNTIME" exec --overlay "$SNPEFF_OVERLAY" "$SNPEFF_CTNR" sh -c '
+SNPEFF_PATH=$("$CONTAINER_RUNTIME" exec --fakeroot --overlay "$SNPEFF_OVERLAY" "$SNPEFF_CTNR" sh -c '
     for d in \
         /opt/conda/share/snpeff-5.0-3 \
         /opt/conda/share/snpeff-5.0-2 \
@@ -106,4 +106,4 @@ echo "@ rebuild database"
     snpEff build -genbank -v "$organism_refseq_code"
 
 echo "@ update snpeff database catalog..."
-"$CONTAINER_RUNTIME" exec --overlay "$SNPEFF_OVERLAY" "$SNPEFF_CTNR" snpEff databases > snpEff_DB.catalog
+"$CONTAINER_RUNTIME" exec --fakeroot --overlay "$SNPEFF_OVERLAY" "$SNPEFF_CTNR" snpEff databases > snpEff_DB.catalog

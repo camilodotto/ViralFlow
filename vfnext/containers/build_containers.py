@@ -201,6 +201,7 @@ def main() -> int:
         print(" > Downloading snpeff database catalog...")
         snpeff_command = [
             "apptainer", "exec",
+            "--fakeroot",
             "--overlay", str(snpeff_overlay),
             str(snpeff_img),
             "snpEff", "databases",
