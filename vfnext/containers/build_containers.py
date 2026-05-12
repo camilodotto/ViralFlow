@@ -226,7 +226,7 @@ def main() -> int:
     if path_exists_as_container(snpeff_img):
         print("\nPreparing writable snpEff overlay:")
         try:
-            ensure_overlay(snpeff_overlay, cwd=containers_dir, env=env)
+            ensure_overlay(snpeff_overlay, cwd=containers_dir, env=env, size_mb=1024)
             print(f" > Ready: {snpeff_overlay.name}")
         except subprocess.CalledProcessError as e:
             print(" > Failed <")
