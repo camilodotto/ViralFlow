@@ -13,6 +13,7 @@ arch=${3:-unknown}
 
 # hardcoded paths
 SNPEFF_CTNR="snpeff:5.0.sif"
+SNPEFF_OVERLAY="snpeff_5.0.overlay"
 EFETCH_CTNR="edirect:1.1.0.sif"
 
 if command -v apptainer >/dev/null 2>&1; then
@@ -34,11 +35,17 @@ if [ ! -e "$EFETCH_CTNR" ]; then
     exit 1
 fi
 
+if [ ! -e "$SNPEFF_OVERLAY" ]; then
+    echo "ERROR: snpEff writable overlay not found: $SNPEFF_OVERLAY"
+    echo "Run 'viralflow build-containers --arch $arch' before adding snpEff entries."
+    exit 1
+fi
+
 TMP_DIR=$(mktemp -d)
 trap 'rm -rf "$TMP_DIR"' EXIT
 TMP_GENBANK="$TMP_DIR/genes.gbk"
 
-SNPEFF_PATH=$("$CONTAINER_RUNTIME" exec "$SNPEFF_CTNR" sh -c '
+SNPEFF_PATH=$("$CONTAINER_RUNTIME" exec --overlay "$SNPEFF_OVERLAY" "$SNPEFF_CTNR" sh -c '
     for d in \
         /opt/conda/share/snpeff-5.0-3 \
         /opt/conda/share/snpeff-5.0-2 \
@@ -60,7 +67,7 @@ echo "Using container runtime: $CONTAINER_RUNTIME"
 echo "Using snpEff path: $SNPEFF_PATH"
 
 echo "@ adding new entry..."
-"$CONTAINER_RUNTIME" exec --fakeroot --writable "$SNPEFF_CTNR" sh -c '
+"$CONTAINER_RUNTIME" exec --fakeroot --overlay "$SNPEFF_OVERLAY" "$SNPEFF_CTNR" sh -c '
     set -eu
     snpeff_path=$1
     organism_name=$2
@@ -84,7 +91,7 @@ echo "@ downloading fasta..."
     efetch -db nucleotide -id "$organism_refseq_code" -format gb > "$TMP_GENBANK"
 
 echo "@ copying fasta into snpEff container..."
-"$CONTAINER_RUNTIME" exec --fakeroot --writable \
+"$CONTAINER_RUNTIME" exec --fakeroot --overlay "$SNPEFF_OVERLAY" \
     -B "$TMP_DIR:/tmp/vf-snpeff" \
     "$SNPEFF_CTNR" \
     sh -c '
@@ -95,8 +102,8 @@ echo "@ copying fasta into snpEff container..."
     ' sh "$SNPEFF_PATH" "$organism_refseq_code"
 
 echo "@ rebuild database"
-"$CONTAINER_RUNTIME" exec --fakeroot --writable "$SNPEFF_CTNR" \
+"$CONTAINER_RUNTIME" exec --fakeroot --overlay "$SNPEFF_OVERLAY" "$SNPEFF_CTNR" \
     snpEff build -genbank -v "$organism_refseq_code"
 
 echo "@ update snpeff database catalog..."
-"$CONTAINER_RUNTIME" exec "$SNPEFF_CTNR" snpEff databases > snpEff_DB.catalog
+"$CONTAINER_RUNTIME" exec --overlay "$SNPEFF_OVERLAY" "$SNPEFF_CTNR" snpEff databases > snpEff_DB.catalog

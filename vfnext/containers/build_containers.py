@@ -46,6 +46,22 @@ def run(cmd: List[str], *, cwd: Path, env: Dict[str, str]) -> None:
     subprocess.check_call(cmd, cwd=str(cwd), env=env)
 
 
+def ensure_overlay(overlay_path: Path, *, cwd: Path, env: Dict[str, str], size_mb: int = 2048) -> None:
+    if overlay_path.exists():
+        return
+
+    run(
+        [
+            "apptainer", "overlay", "create",
+            "--fakeroot",
+            "--size", str(size_mb),
+            str(overlay_path),
+        ],
+        cwd=cwd,
+        env=env,
+    )
+
+
 def main() -> int:
     if len(sys.argv) < 2:
         eprint("Usage: build_containers.py <arch>\nExample: build_containers.py arm64")
@@ -117,13 +133,8 @@ def main() -> int:
             str(src),
             str(def_path),
         ]
-        cmd_create_overlay = [
-            "apptainer", "overlay", "create", "--fakeroot", "--size", "2048", str(src),
-        ]
-
         try:
             run(cmd, cwd=workdir, env=env)
-            run(cmd_create_overlay, cwd=workdir, env=env)
             # Copia o resultado para o repo montado
             copy_container(src, dst)
             print(" > Done <")
@@ -147,6 +158,18 @@ def main() -> int:
     else:
         print("\nSome containers failed to build. Please check messages above.")
         return 1
+
+    snpeff_img = containers_dir / "snpeff:5.0.sif"
+    snpeff_overlay = containers_dir / "snpeff_5.0.overlay"
+    if path_exists_as_container(snpeff_img):
+        print("\nPreparing writable snpEff overlay:")
+        try:
+            ensure_overlay(snpeff_overlay, cwd=containers_dir, env=env)
+            print(f" > Ready: {snpeff_overlay.name}")
+        except subprocess.CalledProcessError as e:
+            print(" > Failed <")
+            eprint(f"Error: {e}")
+            return 1
 
     # --- Additional steps (mantém lógica do original, só trocando singularity -> apptainer) ---
     print("\nExecuting additional steps:\n")
@@ -174,11 +197,11 @@ def main() -> int:
         print(" > Skipping nextclade dataset: nextclade:3.18.sif not found.\n")
 
     # 2) snpEff catalog
-    snpeff_img = containers_dir / "snpeff:5.0.sif"
     if path_exists_as_container(snpeff_img):
         print(" > Downloading snpeff database catalog...")
         snpeff_command = [
             "apptainer", "exec",
+            "--overlay", str(snpeff_overlay),
             str(snpeff_img),
             "snpEff", "databases",
         ]
