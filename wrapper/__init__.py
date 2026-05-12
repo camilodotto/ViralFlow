@@ -51,6 +51,66 @@ def add_entries_to_DB(root_path, org_name, refseq_code, arch):
     print(" ".join(run_bash))
     subprocess.check_call(run_bash)
 
+
+def _container_names_from_repository_file(repository_file: Path):
+    if not repository_file.exists():
+        return []
+
+    names = []
+    for line in repository_file.read_text(encoding="utf-8").splitlines():
+        container = line.strip()
+        if not container:
+            continue
+        parts = container.split("/")
+        if len(parts) >= 3:
+            names.append(f"{parts[2]}.sif")
+    return names
+
+
+def _remove_path(path: Path):
+    if path.is_dir():
+        shutil.rmtree(path)
+        print(f"Removed directory: {path}")
+    elif path.exists():
+        path.unlink()
+        print(f"Removed file: {path}")
+
+
+def clean_containers(root_path, arch: str):
+    containers_dir = Path(root_path) / "vfnext" / "containers"
+    repositories = {
+        "arm64": "repositories_arm64.txt",
+        "amd64": "repositories_amd64.txt",
+    }
+    repository_file = containers_dir / "repositories" / repositories.get(arch, "repositories_amd64.txt")
+
+    names = set(_container_names_from_repository_file(repository_file))
+    patterns = [
+        "pangolin:*.sif",
+        "pangolin_*.overlay",
+        "snpeff:*.sif",
+        "snpeff_*.overlay",
+        "snpEff_DB.catalog",
+    ]
+
+    print("Cleaning generated ViralFlow container artifacts...")
+    removed = 0
+
+    for name in sorted(names):
+        path = containers_dir / name
+        if path.exists():
+            _remove_path(path)
+            removed += 1
+
+    for pattern in patterns:
+        for path in sorted(containers_dir.glob(pattern)):
+            if path.exists():
+                _remove_path(path)
+                removed += 1
+
+    if removed == 0:
+        print("No generated container artifacts found to remove.")
+
 def parse_csv(csv_flpath):
     with open(csv_flpath, "r") as csv_fl:
         first_line = True
@@ -65,13 +125,18 @@ def parse_csv(csv_flpath):
             entries_lst.append(entry)
     return entries_lst
 
-def build_containers(root_path, arch: str):
+def build_containers(root_path, arch: str, clean: bool = False):
     """
     run script to build container for vfnext
     """
+    if clean:
+        clean_containers(root_path, arch)
+
     # build containers
     cd_to_dir= f"cd {root_path}/vfnext/containers/" 
     build_sandbox = f"python ./build_containers.py {arch}"
+    if clean:
+        build_sandbox += " --clean"
     pull_containers = f"python ./pull_containers.py {arch}"
     os.system(cd_to_dir+';'+pull_containers) 
     print(cd_to_dir+';'+build_sandbox)

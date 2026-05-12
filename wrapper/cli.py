@@ -47,9 +47,15 @@ def cli(ctx):
     type=click.Choice(["amd64", "arm64"], case_sensitive=False),
     help="Architecture to build containers"
 )
-def build_containers(arch):
+@click.option(
+    "--clean",
+    is_flag=True,
+    default=False,
+    help="Remove previously generated containers and overlays before rebuilding"
+)
+def build_containers(arch, clean):
     """Build containers for vfnext."""
-    _build_containers(VF_ROOT_PATH, arch)
+    _build_containers(VF_ROOT_PATH, arch, clean=clean)
 
 
 @cli.command("update-pangolin")

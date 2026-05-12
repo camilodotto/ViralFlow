@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import argparse
 import os
 import sys
 import shutil
@@ -24,6 +25,18 @@ def ensure_dir(p: Path) -> None:
 def cleanup_dir(p: Path) -> None:
     if p.exists():
         shutil.rmtree(p)
+
+
+def remove_path(p: Path) -> bool:
+    if p.is_dir():
+        shutil.rmtree(p)
+        print(f"Removed directory: {p}")
+        return True
+    if p.exists():
+        p.unlink()
+        print(f"Removed file: {p}")
+        return True
+    return False
 
 
 def copy_container(src: Path, dst: Path) -> None:
@@ -62,12 +75,46 @@ def ensure_overlay(overlay_path: Path, *, cwd: Path, env: Dict[str, str], size_m
     )
 
 
-def main() -> int:
-    if len(sys.argv) < 2:
-        eprint("Usage: build_containers.py <arch>\nExample: build_containers.py arm64")
-        return 2
+def clean_generated_artifacts(containers_dir: Path, specs: List[Tuple[str, str]]) -> None:
+    patterns = [
+        "pangolin_*.overlay",
+        "snpeff_*.overlay",
+        "snpEff_DB.catalog",
+    ]
 
-    arch = sys.argv[1].strip()
+    removed = 0
+    print("Cleaning generated build-container artifacts:")
+
+    for image_name, _def_rel in specs:
+        if remove_path(containers_dir / image_name):
+            removed += 1
+
+    for pattern in patterns:
+        for path in sorted(containers_dir.glob(pattern)):
+            if remove_path(path):
+                removed += 1
+
+    if removed == 0:
+        print("No generated build-container artifacts found to remove.")
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(
+        description="Build ViralFlow containers that are generated locally."
+    )
+    parser.add_argument(
+        "arch",
+        choices=["amd64", "arm64"],
+        help="Architecture to build containers",
+    )
+    parser.add_argument(
+        "--clean",
+        action="store_true",
+        help="Remove previously generated containers and overlays before rebuilding",
+    )
+    args = parser.parse_args()
+
+    arch = args.arch.strip()
 
     containers_dir = Path(__file__).resolve().parent  # .../vfnext/containers (pode ser /Users/... no Lima)
     vm_home = Path.home().resolve()                  # HOME real da VM (ex.: /home/usuario)
@@ -99,6 +146,9 @@ def main() -> int:
         ("pangolin:4.4.sif", f"def_files/{arch}/Singularity_pangolin"),
         ("snpeff:5.0.sif",   f"def_files/{arch}/Singularity_snpEff"),
     ]
+
+    if args.clean:
+        clean_generated_artifacts(containers_dir, specs)
 
     failed: List[Tuple[str, str]] = []
     already_built: List[str] = []
