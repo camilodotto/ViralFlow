@@ -632,6 +632,8 @@ def generate_coverage_plot(short_summary_df, outdir):
   <line x1="{left}" y1="{top + plot_height}" x2="{left}" y2="{top}" stroke="{axis_color}" stroke-width="2" />
   <path d="M {left + plot_width - 18} {top + plot_height - 12} L {left + plot_width} {top + plot_height} L {left + plot_width - 18} {top + plot_height + 12}" fill="none" stroke="{axis_color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
   <path d="M {left - 12} {top + 18} L {left} {top} L {left + 12} {top + 18}" fill="none" stroke="{axis_color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+  <circle cx="{left + plot_width - 208}" cy="{top + 26}" r="5" fill="{cneg_blue}" fill-opacity="0.82" />
+  <text x="{left + plot_width - 184}" y="{top + 32}" class="tick">Cneg: negative control</text>
   {line_svg}
   {''.join(circles)}
   <text x="{left + (plot_width / 2)}" y="{height - 34}" text-anchor="middle" class="label">Coverage breadth (%)</text>
