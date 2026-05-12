@@ -303,6 +303,7 @@ def compile_output_fls(data_dir, out_dir, depth, virus_tag):
             all_metrics_df = pd.concat(mtrcs_df_lst, ignore_index=True)
             all_metrics_df.to_csv(out_dir + "/reads_count.csv", index=False)
             print("  > reads_count.csv")
+            generate_reads_count_plot(all_metrics_df, out_dir)
         except(AssertionError):
             print("WARN: No reads_count data")
         try:
@@ -433,17 +434,115 @@ def _svg_escape(value):
     )
 
 
+def generate_reads_count_plot(reads_count_df, outdir):
+    """
+    Generate an SVG bar plot from reads_count.csv data.
+    """
+    required_columns = {"cod", "total_reads"}
+    if not required_columns.issubset(reads_count_df.columns):
+        missing = ", ".join(sorted(required_columns - set(reads_count_df.columns)))
+        print(f"WARN: reads count plot was not generated. Missing columns: {missing}")
+        return
+
+    plot_df = reads_count_df[["cod", "total_reads"]].copy()
+    plot_df["total_reads"] = pd.to_numeric(plot_df["total_reads"], errors="coerce")
+    plot_df = plot_df.dropna()
+
+    if len(plot_df) == 0:
+        print("WARN: reads count plot was not generated. No numeric data available.")
+        return
+
+    cod_values = [str(value) for value in plot_df["cod"].tolist()]
+    read_values = plot_df["total_reads"].tolist()
+
+    width = 960
+    height = 640
+    left = 120
+    right = 48
+    top = 72
+    bottom = 130
+    plot_width = width - left - right
+    plot_height = height - top - bottom
+    axis_color = "#000000"
+    cneg_color = "#2f80ed"
+    bar_color = "#c8443a"
+    grid = "#e9f5ec"
+    text = "#4f5b57"
+
+    y_max = _nice_axis_max(max(read_values) * 1.12)
+    if y_max < 5:
+        y_max = 5
+
+    def sy(y):
+        return top + plot_height - (y / y_max * plot_height)
+
+    y_ticks = [i * y_max / 5 for i in range(0, 6)]
+    svg_ticks = []
+    for tick in y_ticks:
+        svg_ticks.append(
+            f'<line x1="{left}" y1="{sy(tick):.2f}" x2="{left + plot_width}" y2="{sy(tick):.2f}" stroke="{grid}" />'
+            f'<text x="{left - 16}" y="{sy(tick) + 5:.2f}" text-anchor="end" class="tick">{tick:.0f}</text>'
+        )
+
+    slot_width = plot_width / len(plot_df)
+    bar_width = min(slot_width * 0.5, 120)
+    bars = []
+    labels = []
+    for idx, (cod, total_reads) in enumerate(zip(cod_values, read_values)):
+        center_x = left + (slot_width * idx) + (slot_width / 2)
+        bar_height = plot_height - (sy(total_reads) - top)
+        x = center_x - (bar_width / 2)
+        y = sy(total_reads)
+        color = cneg_color if cod == "Cneg" else bar_color
+        bars.append(
+            f'<rect x="{x:.2f}" y="{y:.2f}" width="{bar_width:.2f}" height="{bar_height:.2f}" '
+            f'fill="{color}" fill-opacity="0.18" stroke="{color}" stroke-width="2" />'
+        )
+        labels.append(
+            f'<text x="{center_x:.2f}" y="{top + plot_height + 34}" text-anchor="middle" class="sample-label">{_svg_escape(cod)}</text>'
+        )
+
+    svg = f'''<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">
+  <style>
+    .title {{ font: 700 28px Arial, Helvetica, sans-serif; fill: {axis_color}; }}
+    .label {{ font: 700 24px Arial, Helvetica, sans-serif; fill: {axis_color}; }}
+    .tick {{ font: 16px Arial, Helvetica, sans-serif; fill: {text}; }}
+    .sample-label {{ font: 700 22px Arial, Helvetica, sans-serif; fill: {axis_color}; }}
+  </style>
+  <rect width="100%" height="100%" fill="white" />
+  <text x="{width / 2}" y="42" text-anchor="middle" class="title">Reads count by sample</text>
+  {''.join(svg_ticks)}
+  <line x1="{left}" y1="{top + plot_height}" x2="{left + plot_width}" y2="{top + plot_height}" stroke="{axis_color}" stroke-width="2" />
+  <line x1="{left}" y1="{top + plot_height}" x2="{left}" y2="{top}" stroke="{axis_color}" stroke-width="2" />
+  <path d="M {left + plot_width - 18} {top + plot_height - 12} L {left + plot_width} {top + plot_height} L {left + plot_width - 18} {top + plot_height + 12}" fill="none" stroke="{axis_color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+  <path d="M {left - 12} {top + 18} L {left} {top} L {left + 12} {top + 18}" fill="none" stroke="{axis_color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+  <rect x="{left + plot_width - 220}" y="{top + 18}" width="24" height="16" fill="{cneg_color}" fill-opacity="0.18" stroke="{cneg_color}" stroke-width="2" />
+  <text x="{left + plot_width - 184}" y="{top + 32}" class="tick">Cneg: negative control</text>
+  {''.join(bars)}
+  {''.join(labels)}
+  <text x="{left + (plot_width / 2)}" y="{height - 34}" text-anchor="middle" class="label">Sample</text>
+  <text transform="translate(34 {top + (plot_height / 2)}) rotate(-90)" text-anchor="middle" class="label">Number of reads</text>
+</svg>
+'''
+
+    svg_path = os.path.join(outdir, "reads_count_plot.svg")
+    with open(svg_path, "w") as svg_file:
+        svg_file.write(svg)
+
+    print(f"  > {svg_path}")
+
+
 def generate_coverage_plot(short_summary_df, outdir):
     """
     Generate an SVG plot from short_summary coverage columns.
     """
-    required_columns = {"coverage_breadth", "mean_depth_coverage"}
+    required_columns = {"cod", "coverage_breadth", "mean_depth_coverage"}
     if not required_columns.issubset(short_summary_df.columns):
         missing = ", ".join(sorted(required_columns - set(short_summary_df.columns)))
         print(f"WARN: coverage plot was not generated. Missing columns: {missing}")
         return
 
-    plot_df = short_summary_df[["coverage_breadth", "mean_depth_coverage"]].copy()
+    plot_df = short_summary_df[["cod", "coverage_breadth", "mean_depth_coverage"]].copy()
     plot_df["coverage_breadth"] = pd.to_numeric(plot_df["coverage_breadth"], errors="coerce")
     plot_df["mean_depth_coverage"] = pd.to_numeric(plot_df["mean_depth_coverage"], errors="coerce")
     plot_df = plot_df.dropna()
@@ -467,6 +566,7 @@ def generate_coverage_plot(short_summary_df, outdir):
     axis_color = "#000000"
     label_color = "#000000"
     point_red = "#c8443a"
+    cneg_blue = "#2f80ed"
     grid = "#e9f5ec"
     text = "#4f5b57"
 
@@ -482,10 +582,15 @@ def generate_coverage_plot(short_summary_df, outdir):
         return top + plot_height - ((y - y_min) / (y_max - y_min) * plot_height)
 
     circles = []
-    for x, y in points:
-        circles.append(
-            f'<circle cx="{sx(x):.2f}" cy="{sy(y):.2f}" r="5" fill="{point_red}" fill-opacity="0.82" />'
-        )
+    for cod, (x, y) in zip(plot_df["cod"].tolist(), points):
+        if str(cod) == "Cneg":
+            circles.append(
+                f'<circle cx="{sx(x):.2f}" cy="{sy(y):.2f}" r="5" fill="{cneg_blue}" fill-opacity="0.82" />'
+            )
+        else:
+            circles.append(
+                f'<circle cx="{sx(x):.2f}" cy="{sy(y):.2f}" r="5" fill="{point_red}" fill-opacity="0.82" />'
+            )
 
     line_svg = ""
     fit = _linear_regression(points)
@@ -496,7 +601,7 @@ def generate_coverage_plot(short_summary_df, outdir):
         line_svg = (
             f'<line x1="{sx(x_min):.2f}" y1="{sy(y_start):.2f}" '
             f'x2="{sx(x_max):.2f}" y2="{sy(y_end):.2f}" '
-            f'stroke="{point_red}" stroke-width="5" stroke-linecap="round" />'
+            f'stroke="{point_red}" stroke-width="3" stroke-linecap="round" />'
         )
 
     x_ticks = [0, 25, 50, 75, 100]
@@ -516,17 +621,17 @@ def generate_coverage_plot(short_summary_df, outdir):
 
     svg = f'''<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">
   <style>
-    .title {{ font: 700 34px Arial, Helvetica, sans-serif; fill: {axis_color}; }}
-    .label {{ font: 700 32px Arial, Helvetica, sans-serif; fill: {label_color}; }}
+    .title {{ font: 700 28px Arial, Helvetica, sans-serif; fill: {axis_color}; }}
+    .label {{ font: 700 24px Arial, Helvetica, sans-serif; fill: {label_color}; }}
     .tick {{ font: 16px Arial, Helvetica, sans-serif; fill: {text}; }}
   </style>
   <rect width="100%" height="100%" fill="white" />
   <text x="{width / 2}" y="42" text-anchor="middle" class="title">Vertical and horizontal coverage relationship</text>
   {''.join(svg_ticks)}
-  <line x1="{left}" y1="{top + plot_height}" x2="{left + plot_width}" y2="{top + plot_height}" stroke="{axis_color}" stroke-width="4" />
-  <line x1="{left}" y1="{top + plot_height}" x2="{left}" y2="{top}" stroke="{axis_color}" stroke-width="4" />
-  <path d="M {left + plot_width - 18} {top + plot_height - 12} L {left + plot_width} {top + plot_height} L {left + plot_width - 18} {top + plot_height + 12}" fill="none" stroke="{axis_color}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" />
-  <path d="M {left - 12} {top + 18} L {left} {top} L {left + 12} {top + 18}" fill="none" stroke="{axis_color}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" />
+  <line x1="{left}" y1="{top + plot_height}" x2="{left + plot_width}" y2="{top + plot_height}" stroke="{axis_color}" stroke-width="2" />
+  <line x1="{left}" y1="{top + plot_height}" x2="{left}" y2="{top}" stroke="{axis_color}" stroke-width="2" />
+  <path d="M {left + plot_width - 18} {top + plot_height - 12} L {left + plot_width} {top + plot_height} L {left + plot_width - 18} {top + plot_height + 12}" fill="none" stroke="{axis_color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+  <path d="M {left - 12} {top + 18} L {left} {top} L {left + 12} {top + 18}" fill="none" stroke="{axis_color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
   {line_svg}
   {''.join(circles)}
   <text x="{left + (plot_width / 2)}" y="{height - 34}" text-anchor="middle" class="label">Coverage breadth (%)</text>
@@ -599,7 +704,7 @@ def _generate_coverage_breadth_range_plot(short_summary_df, outdir, groups, file
         y = sy(count)
         bars.append(
             f'<rect x="{x:.2f}" y="{y:.2f}" width="{bar_width:.2f}" height="{bar_height:.2f}" '
-            f'fill="{bar_color}" fill-opacity="0.18" stroke="{bar_color}" stroke-width="4" />'
+            f'fill="{bar_color}" fill-opacity="0.18" stroke="{bar_color}" stroke-width="2" />'
         )
         labels.append(
             f'<text x="{center_x:.2f}" y="{top + plot_height + 36}" text-anchor="middle" class="range-label">{_svg_escape(label)}</text>'
@@ -607,18 +712,18 @@ def _generate_coverage_breadth_range_plot(short_summary_df, outdir, groups, file
 
     svg = f'''<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">
   <style>
-    .title {{ font: 700 34px Arial, Helvetica, sans-serif; fill: {axis_color}; }}
-    .label {{ font: 700 32px Arial, Helvetica, sans-serif; fill: {axis_color}; }}
+    .title {{ font: 700 28px Arial, Helvetica, sans-serif; fill: {axis_color}; }}
+    .label {{ font: 700 24px Arial, Helvetica, sans-serif; fill: {axis_color}; }}
     .tick {{ font: 16px Arial, Helvetica, sans-serif; fill: {text}; }}
     .range-label {{ font: 700 {label_font_size}px Arial, Helvetica, sans-serif; fill: {axis_color}; }}
   </style>
   <rect width="100%" height="100%" fill="white" />
   <text x="{width / 2}" y="42" text-anchor="middle" class="title">{_svg_escape(title)}</text>
   {''.join(svg_ticks)}
-  <line x1="{left}" y1="{top + plot_height}" x2="{left + plot_width}" y2="{top + plot_height}" stroke="{axis_color}" stroke-width="4" />
-  <line x1="{left}" y1="{top + plot_height}" x2="{left}" y2="{top}" stroke="{axis_color}" stroke-width="4" />
-  <path d="M {left + plot_width - 18} {top + plot_height - 12} L {left + plot_width} {top + plot_height} L {left + plot_width - 18} {top + plot_height + 12}" fill="none" stroke="{axis_color}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" />
-  <path d="M {left - 12} {top + 18} L {left} {top} L {left + 12} {top + 18}" fill="none" stroke="{axis_color}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" />
+  <line x1="{left}" y1="{top + plot_height}" x2="{left + plot_width}" y2="{top + plot_height}" stroke="{axis_color}" stroke-width="2" />
+  <line x1="{left}" y1="{top + plot_height}" x2="{left}" y2="{top}" stroke="{axis_color}" stroke-width="2" />
+  <path d="M {left + plot_width - 18} {top + plot_height - 12} L {left + plot_width} {top + plot_height} L {left + plot_width - 18} {top + plot_height + 12}" fill="none" stroke="{axis_color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+  <path d="M {left - 12} {top + 18} L {left} {top} L {left + 12} {top + 18}" fill="none" stroke="{axis_color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
   {''.join(bars)}
   {''.join(labels)}
   <text x="{left + (plot_width / 2)}" y="{height - 34}" text-anchor="middle" class="label">Coverage breadth (%)</text>
