@@ -159,6 +159,18 @@ def main() -> int:
         print("\nSome containers failed to build. Please check messages above.")
         return 1
 
+    pangolin_img = containers_dir / "pangolin:4.4.sif"
+    pangolin_overlay = containers_dir / "pangolin_4.4.overlay"
+    if path_exists_as_container(pangolin_img):
+        print("\nPreparing writable pangolin overlay:")
+        try:
+            ensure_overlay(pangolin_overlay, cwd=containers_dir, env=env)
+            print(f" > Ready: {pangolin_overlay.name}")
+        except subprocess.CalledProcessError as e:
+            print(" > Failed <")
+            eprint(f"Error: {e}")
+            return 1
+
     snpeff_img = containers_dir / "snpeff:5.0.sif"
     snpeff_overlay = containers_dir / "snpeff_5.0.overlay"
     if path_exists_as_container(snpeff_img):
