@@ -456,6 +456,15 @@ def generate_reads_count_plot(reads_count_df, outdir):
         print("WARN: reads count plot was not generated. No numeric data available.")
         return
 
+    plot_df = plot_df.assign(
+        _is_cneg=plot_df["cod"].map(_is_cneg_cod),
+        _cod_sort=plot_df["cod"].map(lambda value: str(value).lower()),
+    ).sort_values(
+        by=["_is_cneg", "_cod_sort"],
+        ascending=[False, True],
+        kind="mergesort",
+    )
+
     cod_values = [str(value) for value in plot_df["cod"].tolist()]
     read_values = plot_df["total_reads"].tolist()
     has_cneg = any(_is_cneg_cod(value) for value in cod_values)
