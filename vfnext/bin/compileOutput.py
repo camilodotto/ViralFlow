@@ -434,6 +434,10 @@ def _svg_escape(value):
     )
 
 
+def _is_cneg_cod(value):
+    return str(value).strip().lower().startswith("cneg")
+
+
 def generate_reads_count_plot(reads_count_df, outdir):
     """
     Generate an SVG bar plot from reads_count.csv data.
@@ -454,13 +458,16 @@ def generate_reads_count_plot(reads_count_df, outdir):
 
     cod_values = [str(value) for value in plot_df["cod"].tolist()]
     read_values = plot_df["total_reads"].tolist()
+    has_cneg = any(_is_cneg_cod(value) for value in cod_values)
 
     width = 960
     height = 640
     left = 120
     right = 48
     top = 72
-    bottom = 130
+    rotate_sample_labels = len(plot_df) > 8
+    bottom = 190 if rotate_sample_labels else 130
+    sample_label_font_size = 14 if rotate_sample_labels else 22
     plot_width = width - left - right
     plot_height = height - top - bottom
     axis_color = "#000000"
@@ -493,13 +500,29 @@ def generate_reads_count_plot(reads_count_df, outdir):
         bar_height = plot_height - (sy(total_reads) - top)
         x = center_x - (bar_width / 2)
         y = sy(total_reads)
-        color = cneg_color if cod == "Cneg" else bar_color
+        color = cneg_color if _is_cneg_cod(cod) else bar_color
         bars.append(
             f'<rect x="{x:.2f}" y="{y:.2f}" width="{bar_width:.2f}" height="{bar_height:.2f}" '
             f'fill="{color}" fill-opacity="0.18" stroke="{color}" stroke-width="2" />'
         )
-        labels.append(
-            f'<text x="{center_x:.2f}" y="{top + plot_height + 34}" text-anchor="middle" class="sample-label">{_svg_escape(cod)}</text>'
+        if rotate_sample_labels:
+            label_x = center_x
+            label_y = top + plot_height + 28
+            labels.append(
+                f'<text x="{label_x:.2f}" y="{label_y}" text-anchor="end" class="sample-label" '
+                f'transform="rotate(-45 {label_x:.2f} {label_y})">{_svg_escape(cod)}</text>'
+            )
+        else:
+            labels.append(
+                f'<text x="{center_x:.2f}" y="{top + plot_height + 34}" text-anchor="middle" class="sample-label">{_svg_escape(cod)}</text>'
+            )
+
+    legend_svg = ""
+    if has_cneg:
+        legend_svg = (
+            f'<rect x="{left + plot_width - 220}" y="{top + 18}" width="24" height="16" '
+            f'fill="{cneg_color}" fill-opacity="0.18" stroke="{cneg_color}" stroke-width="2" />'
+            f'<text x="{left + plot_width - 184}" y="{top + 32}" class="tick">Cneg: negative control</text>'
         )
 
     svg = f'''<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">
@@ -507,7 +530,7 @@ def generate_reads_count_plot(reads_count_df, outdir):
     .title {{ font: 700 28px Arial, Helvetica, sans-serif; fill: {axis_color}; }}
     .label {{ font: 700 24px Arial, Helvetica, sans-serif; fill: {axis_color}; }}
     .tick {{ font: 16px Arial, Helvetica, sans-serif; fill: {text}; }}
-    .sample-label {{ font: 700 22px Arial, Helvetica, sans-serif; fill: {axis_color}; }}
+    .sample-label {{ font: 700 {sample_label_font_size}px Arial, Helvetica, sans-serif; fill: {axis_color}; }}
   </style>
   <rect width="100%" height="100%" fill="white" />
   <text x="{width / 2}" y="42" text-anchor="middle" class="title">Reads count by sample</text>
@@ -516,8 +539,7 @@ def generate_reads_count_plot(reads_count_df, outdir):
   <line x1="{left}" y1="{top + plot_height}" x2="{left}" y2="{top}" stroke="{axis_color}" stroke-width="2" />
   <path d="M {left + plot_width - 18} {top + plot_height - 12} L {left + plot_width} {top + plot_height} L {left + plot_width - 18} {top + plot_height + 12}" fill="none" stroke="{axis_color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
   <path d="M {left - 12} {top + 18} L {left} {top} L {left + 12} {top + 18}" fill="none" stroke="{axis_color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-  <rect x="{left + plot_width - 220}" y="{top + 18}" width="24" height="16" fill="{cneg_color}" fill-opacity="0.18" stroke="{cneg_color}" stroke-width="2" />
-  <text x="{left + plot_width - 184}" y="{top + 32}" class="tick">Cneg: negative control</text>
+  {legend_svg}
   {''.join(bars)}
   {''.join(labels)}
   <text x="{left + (plot_width / 2)}" y="{height - 34}" text-anchor="middle" class="label">Sample</text>
@@ -554,6 +576,7 @@ def generate_coverage_plot(short_summary_df, outdir):
     x_values = _coverage_breadth_percentages(plot_df["coverage_breadth"])
     y_values = plot_df["mean_depth_coverage"].tolist()
     points = list(zip(x_values, y_values))
+    has_cneg = any(_is_cneg_cod(value) for value in plot_df["cod"].tolist())
 
     width = 960
     height = 640
@@ -583,7 +606,7 @@ def generate_coverage_plot(short_summary_df, outdir):
 
     circles = []
     for cod, (x, y) in zip(plot_df["cod"].tolist(), points):
-        if str(cod) == "Cneg":
+        if _is_cneg_cod(cod):
             circles.append(
                 f'<circle cx="{sx(x):.2f}" cy="{sy(y):.2f}" r="5" fill="{cneg_blue}" fill-opacity="0.82" />'
             )
@@ -619,6 +642,14 @@ def generate_coverage_plot(short_summary_df, outdir):
             f'<text x="{left - 16}" y="{sy(tick) + 5:.2f}" text-anchor="end" class="tick">{tick:.0f}</text>'
         )
 
+    legend_svg = ""
+    if has_cneg:
+        legend_svg = (
+            f'<circle cx="{left + plot_width - 208}" cy="{top + 26}" r="5" '
+            f'fill="{cneg_blue}" fill-opacity="0.82" />'
+            f'<text x="{left + plot_width - 184}" y="{top + 32}" class="tick">Cneg: negative control</text>'
+        )
+
     svg = f'''<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">
   <style>
     .title {{ font: 700 28px Arial, Helvetica, sans-serif; fill: {axis_color}; }}
@@ -632,8 +663,7 @@ def generate_coverage_plot(short_summary_df, outdir):
   <line x1="{left}" y1="{top + plot_height}" x2="{left}" y2="{top}" stroke="{axis_color}" stroke-width="2" />
   <path d="M {left + plot_width - 18} {top + plot_height - 12} L {left + plot_width} {top + plot_height} L {left + plot_width - 18} {top + plot_height + 12}" fill="none" stroke="{axis_color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
   <path d="M {left - 12} {top + 18} L {left} {top} L {left + 12} {top + 18}" fill="none" stroke="{axis_color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-  <circle cx="{left + plot_width - 208}" cy="{top + 26}" r="5" fill="{cneg_blue}" fill-opacity="0.82" />
-  <text x="{left + plot_width - 184}" y="{top + 32}" class="tick">Cneg: negative control</text>
+  {legend_svg}
   {line_svg}
   {''.join(circles)}
   <text x="{left + (plot_width / 2)}" y="{height - 34}" text-anchor="middle" class="label">Coverage breadth (%)</text>
