@@ -117,10 +117,11 @@ def main() -> int:
     arch = args.arch.strip()
 
     containers_dir = Path(__file__).resolve().parent  # .../vfnext/containers (pode ser /Users/... no Lima)
-    vm_home = Path.home().resolve()                  # HOME real da VM (ex.: /home/usuario)
+    vm_home = Path.home().resolve()                  # usado apenas em fallback legado abaixo
 
-    # Base interna (no Linux real da VM)
-    base = vm_home / ".viralflow" / "apptainer"
+    # Staging sempre em /tmp para evitar builds em mounts compartilhados do macOS,
+    # mesmo quando o HOME da VM Lima estiver configurado como /Users/<usuario>.
+    base = Path("/tmp") / "viralflow-apptainer"
     tmpdir = base / "tmp"
     cachedir = base / "cache"
     workdir = base / "work" / f"build_{arch}"
@@ -129,7 +130,7 @@ def main() -> int:
     ensure_dir(cachedir)
     ensure_dir(workdir)
 
-    # Força tmp/cache para dentro do HOME real da VM
+    # Força tmp/cache para dentro do staging local da VM.
     # (Apptainer usa /tmp por default, mas TMPDIR e APPTAINER_TMPDIR sobrescrevem isso)
     env = os.environ.copy()
     env.update({
