@@ -263,8 +263,7 @@ def update_pangolin(root_path):
         cwd=containers_dir,
     )
 
-    dependencies = [
-        "git+https://github.com/cov-lineages/pangolin.git",
+    supporting_dependencies = [
         "git+https://github.com/cov-lineages/pangolin-data.git",
         "git+https://github.com/cov-lineages/scorpio.git",
         "git+https://github.com/cov-lineages/constellations.git",
@@ -278,7 +277,20 @@ def update_pangolin(root_path):
             "install",
             "--upgrade",
             "--no-build-isolation",
-            *dependencies,
+            *supporting_dependencies,
+        ],
+        cwd=containers_dir,
+    )
+    _run(
+        exec_prefix
+        + [
+            "/usr/local/bin/mm/bin/python",
+            "-m",
+            "pip",
+            "install",
+            "--upgrade",
+            "--no-build-isolation",
+            "git+https://github.com/cov-lineages/pangolin.git",
         ],
         cwd=containers_dir,
     )
