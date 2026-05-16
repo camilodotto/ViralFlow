@@ -263,25 +263,42 @@ def update_pangolin(root_path):
         cwd=containers_dir,
     )
 
-    for dependency in [
+    dependencies = [
         "git+https://github.com/cov-lineages/pangolin.git",
         "git+https://github.com/cov-lineages/pangolin-data.git",
         "git+https://github.com/cov-lineages/scorpio.git",
         "git+https://github.com/cov-lineages/constellations.git",
-    ]:
+    ]
+    _run(
+        exec_prefix
+        + [
+            "/usr/local/bin/mm/bin/python",
+            "-m",
+            "pip",
+            "install",
+            "--upgrade",
+            "--no-build-isolation",
+            *dependencies,
+        ],
+        cwd=containers_dir,
+    )
+    try:
         _run(
             exec_prefix
             + [
                 "/usr/local/bin/mm/bin/python",
                 "-m",
                 "pip",
-                "install",
-                "--upgrade",
-                "--no-build-isolation",
-                dependency,
+                "check",
             ],
             cwd=containers_dir,
         )
+    except subprocess.CalledProcessError as exc:
+        raise RuntimeError(
+            "Pangolin update finished with incompatible Python dependencies. "
+            "The environment was not left in a reliable state; please rerun the "
+            "update after checking for upstream package compatibility changes."
+        ) from exc
 
 def update_pangolin_data(root_path):
     runtime = _get_container_runtime()
