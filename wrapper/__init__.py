@@ -1,8 +1,12 @@
 from distutils.command.build_scripts import first_line_re
 from logging import root
 import os
+import json
+import re
 import shutil
 import subprocess
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
 from pathlib import Path
 
 
@@ -43,20 +47,56 @@ def _pangolin_exec_prefix(runtime: str, overlay_path: Path, container_path: Path
     ]
 
 
-def _show_pangolin_environment_state(exec_prefix, containers_dir: Path, label: str):
-    print(f"\n[Pangolin update] {label}")
-    _run(
-        exec_prefix
-        + [
-            "/usr/local/bin/mm/bin/python",
-            "-m",
-            "pip",
-            "show",
-            "pangolin",
-            "scikit-learn",
-        ],
-        cwd=containers_dir,
-    )
+_PANGOLIN_REPO_API = "https://api.github.com/repos/cov-lineages/pangolin"
+_STABLE_TAG_PATTERN = re.compile(r"^v(\d+)\.(\d+)(?:\.(\d+))?$")
+
+
+def _github_json(url: str):
+    request = Request(url, headers={"Accept": "application/vnd.github+json"})
+    with urlopen(request, timeout=30) as response:
+        return json.load(response)
+
+
+def _stable_tag_sort_key(tag: str):
+    match = _STABLE_TAG_PATTERN.fullmatch(tag)
+    if not match:
+        return None
+    major, minor, patch = match.groups()
+    return int(major), int(minor), int(patch or 0)
+
+
+def _get_latest_stable_pangolin_tag():
+    try:
+        latest_release = _github_json(f"{_PANGOLIN_REPO_API}/releases/latest")
+        release_tag = latest_release.get("tag_name", "")
+        if _stable_tag_sort_key(release_tag) is not None:
+            return release_tag
+    except (HTTPError, URLError, TimeoutError, json.JSONDecodeError):
+        pass
+
+    tags = []
+    page = 1
+    try:
+        while True:
+            page_tags = _github_json(f"{_PANGOLIN_REPO_API}/tags?per_page=100&page={page}")
+            if not page_tags:
+                break
+            tags.extend(page_tags)
+            page += 1
+    except (HTTPError, URLError, TimeoutError, json.JSONDecodeError) as exc:
+        raise RuntimeError(
+            "Unable to determine the latest stable Pangolin version from GitHub."
+        ) from exc
+
+    stable_tags = [
+        tag["name"]
+        for tag in tags
+        if isinstance(tag, dict) and _stable_tag_sort_key(tag.get("name", "")) is not None
+    ]
+    if not stable_tags:
+        raise RuntimeError("No stable Pangolin tags were found on GitHub.")
+
+    return max(stable_tags, key=_stable_tag_sort_key)
 
 
 def add_entries_to_DB(root_path, org_name, refseq_code, arch):
@@ -265,7 +305,6 @@ def update_pangolin(root_path):
         ],
         cwd=containers_dir,
     )
-    _show_pangolin_environment_state(exec_prefix, containers_dir, "after micromamba update")
     _run(
         exec_prefix
         + [
@@ -279,45 +318,28 @@ def update_pangolin(root_path):
         ],
         cwd=containers_dir,
     )
-    _show_pangolin_environment_state(exec_prefix, containers_dir, "after setuptools/wheel update")
+    pangolin_tag = _get_latest_stable_pangolin_tag()
+    print(f"Using latest stable Pangolin tag: {pangolin_tag}")
 
-    supporting_dependencies = [
+    for dependency in [
+        f"git+https://github.com/cov-lineages/pangolin.git@{pangolin_tag}",
         "git+https://github.com/cov-lineages/pangolin-data.git",
         "git+https://github.com/cov-lineages/scorpio.git",
         "git+https://github.com/cov-lineages/constellations.git",
-    ]
-    _run(
-        exec_prefix
-        + [
-            "/usr/local/bin/mm/bin/python",
-            "-m",
-            "pip",
-            "install",
-            "--upgrade",
-            "--no-build-isolation",
-            *supporting_dependencies,
-        ],
-        cwd=containers_dir,
-    )
-    _show_pangolin_environment_state(
-        exec_prefix,
-        containers_dir,
-        "after pangolin supporting packages update",
-    )
-    _run(
-        exec_prefix
-        + [
-            "/usr/local/bin/mm/bin/python",
-            "-m",
-            "pip",
-            "install",
-            "--upgrade",
-            "--no-build-isolation",
-            "git+https://github.com/cov-lineages/pangolin.git",
-        ],
-        cwd=containers_dir,
-    )
-    _show_pangolin_environment_state(exec_prefix, containers_dir, "after pangolin update")
+    ]:
+        _run(
+            exec_prefix
+            + [
+                "/usr/local/bin/mm/bin/python",
+                "-m",
+                "pip",
+                "install",
+                "--upgrade",
+                "--no-build-isolation",
+                dependency,
+            ],
+            cwd=containers_dir,
+        )
     try:
         _run(
             exec_prefix
