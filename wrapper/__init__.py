@@ -43,6 +43,22 @@ def _pangolin_exec_prefix(runtime: str, overlay_path: Path, container_path: Path
     ]
 
 
+def _show_pangolin_environment_state(exec_prefix, containers_dir: Path, label: str):
+    print(f"\n[Pangolin update] {label}")
+    _run(
+        exec_prefix
+        + [
+            "/usr/local/bin/mm/bin/python",
+            "-m",
+            "pip",
+            "show",
+            "pangolin",
+            "scikit-learn",
+        ],
+        cwd=containers_dir,
+    )
+
+
 def add_entries_to_DB(root_path, org_name, refseq_code, arch):
     """
     add entries provided to snpeff database
@@ -249,6 +265,7 @@ def update_pangolin(root_path):
         ],
         cwd=containers_dir,
     )
+    _show_pangolin_environment_state(exec_prefix, containers_dir, "after micromamba update")
     _run(
         exec_prefix
         + [
@@ -262,6 +279,7 @@ def update_pangolin(root_path):
         ],
         cwd=containers_dir,
     )
+    _show_pangolin_environment_state(exec_prefix, containers_dir, "after setuptools/wheel update")
 
     supporting_dependencies = [
         "git+https://github.com/cov-lineages/pangolin-data.git",
@@ -281,6 +299,11 @@ def update_pangolin(root_path):
         ],
         cwd=containers_dir,
     )
+    _show_pangolin_environment_state(
+        exec_prefix,
+        containers_dir,
+        "after pangolin supporting packages update",
+    )
     _run(
         exec_prefix
         + [
@@ -294,6 +317,7 @@ def update_pangolin(root_path):
         ],
         cwd=containers_dir,
     )
+    _show_pangolin_environment_state(exec_prefix, containers_dir, "after pangolin update")
     try:
         _run(
             exec_prefix
