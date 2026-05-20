@@ -474,9 +474,8 @@ def generate_reads_count_plot(reads_count_df, outdir):
     left = 120
     right = 48
     top = 72
-    rotate_sample_labels = len(plot_df) > 8
-    bottom = 190 if rotate_sample_labels else 130
-    sample_label_font_size = 14 if rotate_sample_labels else 22
+    bottom = 190
+    sample_label_font_size = 14
     plot_width = width - left - right
     plot_height = height - top - bottom
     axis_color = "#000000"
@@ -514,17 +513,12 @@ def generate_reads_count_plot(reads_count_df, outdir):
             f'<rect x="{x:.2f}" y="{y:.2f}" width="{bar_width:.2f}" height="{bar_height:.2f}" '
             f'fill="{color}" fill-opacity="0.18" stroke="{color}" stroke-width="2" />'
         )
-        if rotate_sample_labels:
-            label_x = center_x
-            label_y = top + plot_height + 28
-            labels.append(
-                f'<text x="{label_x:.2f}" y="{label_y}" text-anchor="end" class="sample-label" '
-                f'transform="rotate(-45 {label_x:.2f} {label_y})">{_svg_escape(cod)}</text>'
-            )
-        else:
-            labels.append(
-                f'<text x="{center_x:.2f}" y="{top + plot_height + 34}" text-anchor="middle" class="sample-label">{_svg_escape(cod)}</text>'
-            )
+        label_x = center_x
+        label_y = top + plot_height + 28
+        labels.append(
+            f'<text x="{label_x:.2f}" y="{label_y}" text-anchor="end" class="sample-label" '
+            f'transform="rotate(-45 {label_x:.2f} {label_y})">{_svg_escape(cod)}</text>'
+        )
 
     legend_svg = ""
     if has_cneg:
