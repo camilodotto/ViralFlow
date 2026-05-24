@@ -1,6 +1,7 @@
 from distutils.command.build_scripts import first_line_re
 from logging import root
 import os
+import shutil
 import subprocess
 
 
@@ -26,13 +27,49 @@ def parse_csv(csv_flpath):
             entries_lst.append(entry)
     return entries_lst
 
-def build_containers(root_path, arch: str):
+def _remove_path(path):
+    if os.path.isdir(path):
+        shutil.rmtree(path)
+        print(f"Removed directory: {path}")
+        return True
+    if os.path.exists(path):
+        os.remove(path)
+        print(f"Removed file: {path}")
+        return True
+    return False
+
+def clean_containers(root_path):
+    """
+    remove locally generated sandbox containers and build artifacts
+    """
+    containers_dir = os.path.join(root_path, "vfnext", "containers")
+    artifacts = [
+        "pangolin:4.4.sif",
+        "snpeff:5.0.sif",
+        "snpEff_DB.catalog",
+    ]
+
+    print("Cleaning generated ViralFlow container artifacts...")
+    removed = 0
+    for artifact in artifacts:
+        if _remove_path(os.path.join(containers_dir, artifact)):
+            removed += 1
+
+    if removed == 0:
+        print("No generated container artifacts found to remove.")
+
+def build_containers(root_path, arch: str, clean: bool = False):
     """
     run script to build container for vfnext
     """
+    if clean:
+        clean_containers(root_path)
+
     # build containers
     cd_to_dir= f"cd {root_path}/vfnext/containers/" 
     build_sandbox = f"python ./build_containers.py {arch}"
+    if clean:
+        build_sandbox += " --clean"
     pull_containers = f"python ./pull_containers.py {arch}"
     os.system(cd_to_dir+';'+pull_containers) 
     print(cd_to_dir+';'+build_sandbox)

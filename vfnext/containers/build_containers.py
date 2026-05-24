@@ -1,8 +1,10 @@
 import subprocess
 import os
 import sys
+import shutil
 
 arch = sys.argv[1]
+clean = "--clean" in sys.argv[2:]
 
 containers = [
     "pangolin:4.4.sif",
@@ -18,6 +20,29 @@ container_commands = [
 failed_containers = []
 already_built = []
 success = True  # Control variable
+
+def remove_path(path):
+    if os.path.isdir(path):
+        shutil.rmtree(path)
+        print(f"Removed directory: {path}")
+        return True
+    if os.path.exists(path):
+        os.remove(path)
+        print(f"Removed file: {path}")
+        return True
+    return False
+
+def clean_generated_artifacts():
+    artifacts = containers + ["snpEff_DB.catalog"]
+    removed = 0
+
+    print("Cleaning generated build-container artifacts:")
+    for artifact in artifacts:
+        if remove_path(artifact):
+            removed += 1
+
+    if removed == 0:
+        print("No generated build-container artifacts found to remove.")
 
 def container_exists(container):
     return os.path.isdir(container)
@@ -40,6 +65,9 @@ def build_container(container, command):
         print(f"Error: {e}")
         failed_containers.append((container, command))
         return False
+
+if clean:
+    clean_generated_artifacts()
 
 print("Building containers:")
 
