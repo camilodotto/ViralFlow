@@ -65,7 +65,7 @@ workflow {
 
 
 def parse_mnf(mnf) {
-    def mnf_rows = Channel.fromPath(mnf)
+    def mnf_rows = channel.fromPath(mnf)
             .splitCsv(header: true, sep: ',')
             .map { row -> 
                     // set meta
