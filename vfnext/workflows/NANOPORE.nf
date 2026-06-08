@@ -28,19 +28,30 @@ workflow NANOPORE {
     // normlalize indes and filter variants (bcftools)
     run_bcftools(run_clair3.out, ref, params.af_threshold)
     
-    run_bcftools.out.map{meta, vcf -> tuple(meta.id, meta, vcf)}
-        .set { vcf_ch } // tuple (id, meta, vcf)
+    bams_ch
+        .map { meta, bam, bai -> tuple(meta.id, meta, bam, bai) }
+        .set { keyed_bams_ch }
 
-    bams_ch.map { meta, sorted_bam -> tuple(meta.id, sorted_bam)} // tuple (id, sorted_bam)
-    .join(vcf_ch) // tuple (id, sorted_bam, meta, vcf)
-    .map { _id, sorted_bam, meta, vcf ->  tuple(meta, vcf, sorted_bam[0])}
-    .set { vcf_bam_ch } // tuple (meta, vcf, sorted_bam)
+    run_bcftools.out
+        .map { meta, vcf, tbi -> tuple(meta.id, vcf, tbi) }
+        .set { keyed_vcfs_ch }
+
+    keyed_bams_ch
+        .join(keyed_vcfs_ch)
+        .map { _id, meta, bam, bai, vcf, tbi ->
+            tuple(meta, vcf, tbi, bam, bai)
+        }
+        .set { consensus_input_ch }
 
     // call consensus sequence (bcftools consensus)
-    run_bcftools_consensus(vcf_bam_ch, ref, params.np_min_depth)
+    run_bcftools_consensus(consensus_input_ch, ref, params.np_min_depth)
+
+    bams_ch
+        .map { meta, bam, bai -> tuple(meta, bam, bai, false) }
+        .set { plot_bams_ch }
 
     emit:
-        bams_ch = run_minimap2.out //meta, sorted_bam
+        bams_ch = plot_bams_ch // tuple (meta, sorted_bam, bai, is_paired_end)
 }
 
 workflow {

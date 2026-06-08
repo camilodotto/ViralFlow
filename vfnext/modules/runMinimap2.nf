@@ -9,7 +9,9 @@ process run_minimap2 {
         path(ref)
     
     output:
-        tuple val(meta), path("${meta.id}.sorted.bam*")
+        tuple val(meta),
+              path("${meta.id}.sorted.bam"),
+              path("${meta.id}.sorted.bam.bai")
   
     script:
     """

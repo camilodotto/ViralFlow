@@ -5,7 +5,7 @@ process run_clair3{
     container "docker://hkubal/clair3:v1.1.0"
     
     input:
-        tuple val(meta), path(bam)
+        tuple val(meta), path(bam), path(bai)
         path(ref)
         val(chunk_size) // 10000
         val(qual) // 10

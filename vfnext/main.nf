@@ -77,11 +77,7 @@ log.info """
 
   if (params.mode == "NANOPORE"){
     NANOPORE(reads_ch, ref_fa)
-    def bams_ch = NANOPORE.out.bams_ch.map{meta, bam -> 
-        // Remove once NANOPORE emits (meta,bam,bai)
-        assert bam instanceof List && bam.size()==2 : "NANOPORE bams_ch must be meta, [bam,bai]"
-        tuple(meta, bam[0], bam[1], false)}  // Nanopore is always single-end
-    GENPLOTS(bams_ch)
+    GENPLOTS(NANOPORE.out.bams_ch)
   }
 
 // -------------- Check if everything went okay -------------------------------
@@ -100,4 +96,3 @@ workflow.onComplete = {
 }
 
 }
-
