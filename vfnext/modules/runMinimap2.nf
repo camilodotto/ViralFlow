@@ -15,9 +15,11 @@ process run_minimap2 {
   
     script:
     """
+    set -euo pipefail
+
     minimap2 -a -x map-ont -t ${task.cpus} ${ref} ${fastq} \
-    | samtools view -bS - \
-    | samtools sort -o ${meta.id}.sorted.bam
+        | samtools view -bS - \
+        | samtools sort -o ${meta.id}.sorted.bam
         
     samtools index ${meta.id}.sorted.bam
     """

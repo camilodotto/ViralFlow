@@ -17,6 +17,8 @@ process run_clair3{
   
     script:
     """
+    set -euo pipefail
+
     samtools faidx ${ref}
     
     run_clair3.sh \

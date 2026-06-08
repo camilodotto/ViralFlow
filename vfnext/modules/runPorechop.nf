@@ -13,6 +13,8 @@ process run_porechop {
   
     script:
     """
+    set -euo pipefail
+
     porechop_abi -abi -i ${fastq} -t ${task.cpus} -o ${meta.id}.chopped.fastq
     """
 }
