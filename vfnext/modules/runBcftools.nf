@@ -17,15 +17,13 @@ process run_bcftools {
   
     script:
     """
-    # normalize indels
-    bcftools norm -m - -f ${ref} ${vcf} > norm.vcf
-    
-    # filter variants based on allele frequency
-    bcftools filter -i "FORMAT/AF >= ${af_threshold}" norm.vcf -o ${meta.id}.filtered.vcf -O z
-    
-    # index the filtered VCF
-    bgzip ${meta.id}.filtered.vcf
-    tabix ${meta.id}.filtered.vcf.gz
+    set -euo pipefail
+
+    bcftools norm -m - -f ${ref} ${vcf} -Ou \
+        | bcftools filter -i "FORMAT/AF >= ${af_threshold}" -Oz \
+            -o ${meta.id}.filtered.vcf.gz
+
+    bcftools index --tbi ${meta.id}.filtered.vcf.gz
     """
 }
 
@@ -45,6 +43,8 @@ process run_bcftools_consensus {
   
     shell:
     '''
+    set -euo pipefail
+
     # create a bed file with low coverage regions
     # this is used to mask low coverage regions in the consensus sequence
     samtools depth -J -a !{bam} > !{meta.id}.cov.bed
