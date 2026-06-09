@@ -226,8 +226,7 @@ def validate_parameters() {
     
     // Exit if errors found
     if (errors > 0) {
-        log.error("${errors} validation errors detected")
-        exit 1
+        error "${errors} validation errors detected"
     }
 }
 
@@ -278,8 +277,7 @@ workflow processInputs {
       if (params.referenceGenome){
         reference_fa = file(params.referenceGenome)
       } else {
-        log.error("A reference genome fasta file must be provided for NANOPORE mode")
-        exit 1
+        error "A reference genome fasta file must be provided for NANOPORE mode"
       }
 
       reference_gff = null

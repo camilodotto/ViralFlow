@@ -1,0 +1,34 @@
+nextflow_pipeline {
+
+    name "Test failed-run manifest"
+    script "main.nf"
+
+    test("Should finalize metadata when validation fails") {
+
+        when {
+            params {
+                mode = "INVALID_MODE"
+                inDir = "${projectDir}/missing-input"
+                outDir = "${projectDir}/test_results/metadata-failed-run"
+            }
+        }
+
+        then {
+            assert workflow.failed
+
+            def manifestFile = path(
+                "${projectDir}/test_results/metadata-failed-run/RUN_METADATA/run_manifest.json"
+            )
+            assert manifestFile.exists()
+
+            def manifest = new groovy.json.JsonSlurper()
+                .parse(manifestFile.toFile())
+            assert manifest.execution.status == "FAILED"
+            assert manifest.execution.failure_message.contains(
+                "validation errors detected"
+            )
+            assert manifest.execution.end_time != null
+            assert manifest.parameters.mode == "INVALID_MODE"
+        }
+    }
+}

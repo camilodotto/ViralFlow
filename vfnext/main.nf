@@ -8,6 +8,7 @@ include { processInputs } from './workflows/step0-input-handling.nf'
 include {ILLUMINA} from './workflows/ILLUMINA.nf'
 include {NANOPORE} from './workflows/NANOPORE.nf'
 include {GENPLOTS} from './workflows/GENPLOTS.nf'
+include {METADATA} from './modules/metadata.nf'
 
 // The code for the inital log info is based on the one found at FASTQC PIPELINE
 // https://github.com/angelovangel/nxf-fastqc/blob/master/main.nf
@@ -22,6 +23,39 @@ workflow {
 def ANSI_GREEN = "\033[1;32m"
 def ANSI_RED = "\033[1;31m"
 def ANSI_RESET = "\033[0m"
+
+MetadataHelper.writeManifest(workflow, params, "RUNNING")
+
+workflow.onError = {
+  MetadataHelper.writeManifest(
+    workflow,
+    params,
+    "FAILED",
+    MetadataHelper.failureMessage(workflow)
+  )
+}
+
+workflow.onComplete = {
+  def finalStatus = workflow.success ? "SUCCESS" : "FAILED"
+  MetadataHelper.writeManifest(
+    workflow,
+    params,
+    finalStatus,
+    workflow.success ? null : MetadataHelper.failureMessage(workflow)
+  )
+
+  if (workflow.success) {
+    log.info """
+      ===========================================
+      ${ANSI_GREEN}Finished in ${workflow.duration}
+      """.stripIndent()
+  } else {
+    log.info """
+      ===========================================
+      ${ANSI_RED}Finished with errors!${ANSI_RESET}
+      """.stripIndent()
+  }
+}
 
 log.info """
   ===========================================
@@ -70,6 +104,75 @@ log.info """
   ref_fa = processInputs.out.ref_fa
   ref_gcode = processInputs.out.ref_gcode
 
+  reads_metadata_ch = reads_ch.flatMap { meta, files ->
+    def inputFiles = files instanceof List ? files : [files]
+    inputFiles.withIndex().collect { inputFile, index ->
+      tuple(
+        meta.id,
+        "fastq_${index + 1}",
+        inputFile.toAbsolutePath().normalize().toString(),
+        inputFile
+      )
+    }
+  }
+
+  reference_metadata_ch = ref_fa.map { reference ->
+    tuple(
+      "reference",
+      "reference_fasta",
+      reference.toAbsolutePath().normalize().toString(),
+      reference
+    )
+  }
+
+  gff_metadata_ch = params.mode == "ILLUMINA"
+    ? ref_gff
+        .filter { referenceGff -> referenceGff != null }
+        .map { referenceGff ->
+          tuple(
+            "reference",
+            "reference_gff",
+            referenceGff.toAbsolutePath().normalize().toString(),
+            referenceGff
+          )
+        }
+    : channel.empty()
+
+  primer_metadata_ch = params.primersBED
+    ? channel.of(
+        tuple(
+          "reference",
+          "primers_bed",
+          file(params.primersBED).toAbsolutePath().normalize().toString(),
+          file(params.primersBED)
+        )
+      )
+    : channel.empty()
+
+  checksum_inputs_ch = reads_metadata_ch
+    .concat(reference_metadata_ch)
+    .concat(gff_metadata_ch)
+    .concat(primer_metadata_ch)
+
+  tool_specs_ch = channel.fromList(
+    MetadataHelper.toolSpecs(params, workflow).collect { spec ->
+      tuple(spec.mode, spec.tool, spec.command, spec.container)
+    }
+  )
+
+  container_specs_ch = channel.fromList(
+    MetadataHelper.containerSpecs(params, workflow).collect { spec ->
+      tuple(spec.name, spec.kind, spec.identity)
+    }
+  )
+
+  METADATA(
+    checksum_inputs_ch,
+    tool_specs_ch,
+    container_specs_ch,
+    MetadataHelper.metadataDir(params).toString()
+  )
+
   if (params.mode == "ILLUMINA"){
     ILLUMINA(reads_ch, ref_fa,ref_gff,ref_gcode)
     GENPLOTS(ILLUMINA.out.bams_ch)
@@ -79,20 +182,5 @@ log.info """
     NANOPORE(reads_ch, ref_fa)
     GENPLOTS(NANOPORE.out.bams_ch)
   }
-
-// -------------- Check if everything went okay -------------------------------
-workflow.onComplete = {
-  if (workflow.success) {
-    log.info """
-      ===========================================
-      ${ANSI_GREEN}Finished in ${workflow.duration}
-      """.stripIndent()
-  } else {
-    log.info """
-      ===========================================
-      ${ANSI_RED}Finished with errors!${ANSI_RESET}
-      """.stripIndent()
-  }
-}
 
 }
