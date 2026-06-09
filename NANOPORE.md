@@ -40,6 +40,25 @@ nextflow run /../ViralFlow/vfnext/main.nf \
 
 to run it using apptainer, just add `-profile apptainer` to your nextflow command.
 
+## Current threshold behavior
+
+The current threshold logic is as follows:
+
+- Clair3 receives `--qual` from `clair3_qual` and `--min_mq` from
+  `mapping_quality`.
+- BCFtools retains variants when `FORMAT/AF >= af_threshold`. No additional
+  variant depth or `FILTER=PASS` condition is applied.
+- Consensus coverage is calculated with `samtools depth -J -a` without
+  additional mapping-quality or base-quality filters.
+- Consensus positions with depth less than or equal to `np_min_depth` are
+  masked.
+
+Consequently, a low-depth variant can remain in the filtered VCF while the same
+position is masked in the consensus. Each sample directory contains a
+`<sample>.nanopore_qc.tsv` file that reports the configured thresholds, variant
+counts, depth summary, masked bases, and callable consensus percentage. This
+file is descriptive and does not affect pipeline success or filtering.
+
 ## Reproducibility metadata
 
 Every run writes reproducibility records under `RUN_METADATA` inside the output

@@ -6,6 +6,7 @@ include {run_amplicon_clip} from '../modules/runAmpliconClip.nf'
 include {run_bam_utils} from '../modules/runBamUtils.nf'
 include {run_clair3} from '../modules/runClair3.nf'
 include {run_bcftools; run_bcftools_consensus} from '../modules/runBcftools.nf'
+include {run_nanopore_qc} from '../modules/runNanoporeQc.nf'
 
 workflow NANOPORE {
     take:
@@ -45,6 +46,33 @@ workflow NANOPORE {
 
     // call consensus sequence (bcftools consensus)
     run_bcftools_consensus(consensus_input_ch, ref, params.np_min_depth)
+
+    run_clair3.out
+        .map { meta, vcf -> tuple(meta.id, vcf) }
+        .set { keyed_raw_vcfs_ch }
+
+    run_bcftools_consensus.out
+        .map { meta, consensus, low_cov, coverage ->
+            tuple(meta.id, meta, consensus, low_cov, coverage)
+        }
+        .set { keyed_consensus_ch }
+
+    keyed_raw_vcfs_ch
+        .join(keyed_vcfs_ch)
+        .join(keyed_consensus_ch)
+        .map { _id, raw_vcf, filtered_vcf, filtered_tbi, meta, consensus, low_cov, coverage ->
+            tuple(meta, raw_vcf, filtered_vcf, filtered_tbi, consensus, low_cov, coverage)
+        }
+        .set { nanopore_qc_input_ch }
+
+    run_nanopore_qc(
+        nanopore_qc_input_ch,
+        ref,
+        params.clair3_qual,
+        params.mapping_quality,
+        params.af_threshold,
+        params.np_min_depth
+    )
 
     bams_ch
         .map { meta, bam, bai -> tuple(meta, bam, bai, false) }

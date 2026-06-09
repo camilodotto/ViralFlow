@@ -9,6 +9,7 @@ nextflow_workflow {
         when {
             params {
                 outDir = ".nf-test/results/bcftools-positive"
+                fixture_min_depth = 0
             }
             workflow {
                 """
@@ -28,7 +29,7 @@ nextflow_workflow {
 
         then {
             assert workflow.success
-            assert workflow.trace.succeeded().size() == 3
+            assert workflow.trace.succeeded().size() == 4
 
             def filtered = workflow.out.filtered.get(0)
             assert filtered[0].id == "sample"
@@ -83,6 +84,72 @@ nextflow_workflow {
                 "chr1\t19\t0",
                 "chr1\t20\t0"
             ]
+
+            def qc = workflow.out.qc.get(0)
+            assert qc[0].id == "sample"
+            def qcMetrics = path(qc[1]).readLines()
+                .drop(1)
+                .collectEntries { line ->
+                    def fields = line.split("\t", 2)
+                    [(fields[0]): fields[1]]
+                }
+            assert qcMetrics.raw_variant_count == "1"
+            assert qcMetrics.af_filtered_variant_count == "1"
+            assert qcMetrics.filtered_variants_depth_missing == "1"
+            assert qcMetrics.masked_bases == "10"
+            assert qcMetrics.consensus_n_bases == "10"
+            assert qcMetrics.callable_bases == "10"
+            assert qcMetrics.callable_percent == "50.000000"
+        }
+    }
+
+    test("Should report variant depth relative to the unchanged consensus threshold") {
+
+        when {
+            params {
+                outDir = ".nf-test/results/bcftools-thresholds"
+                fixture_min_depth = 1
+            }
+            workflow {
+                """
+                meta = [id: "sample"]
+                input[0] = Channel.of(
+                    tuple(meta, file("${projectDir}/tests/data/bcftools/thresholds.vcf"))
+                )
+                input[1] = Channel.value(
+                    file("${projectDir}/tests/data/bcftools/ref.fa")
+                )
+                input[2] = Channel.of(
+                    tuple(meta, file("${projectDir}/tests/data/bcftools/input.sam"))
+                )
+                """
+            }
+        }
+
+        then {
+            assert workflow.success
+
+            def filtered = workflow.out.filtered.get(0)
+            def variantLines = path(filtered[1]).linesGzip.findAll {
+                !it.startsWith("#")
+            }
+            assert variantLines.size() == 3
+
+            def consensus = workflow.out.consensus.get(0)
+            assert path(consensus[1]).text.trim() == ">sample\nNNNNNNNNNNNNNNNNNNNN"
+
+            def qc = workflow.out.qc.get(0)
+            def qcMetrics = path(qc[1]).readLines()
+                .drop(1)
+                .collectEntries { line ->
+                    def fields = line.split("\t", 2)
+                    [(fields[0]): fields[1]]
+                }
+            assert qcMetrics.filtered_variants_depth_below_min == "1"
+            assert qcMetrics.filtered_variants_depth_equal_min == "1"
+            assert qcMetrics.filtered_variants_depth_above_min == "1"
+            assert qcMetrics.masked_bases == "20"
+            assert qcMetrics.consensus_mask_rule == "depth <= consensus_min_depth"
         }
     }
 
@@ -91,6 +158,7 @@ nextflow_workflow {
         when {
             params {
                 outDir = ".nf-test/results/bcftools-malformed"
+                fixture_min_depth = 0
             }
             workflow {
                 """

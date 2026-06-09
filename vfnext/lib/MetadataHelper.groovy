@@ -57,8 +57,11 @@ class MetadataHelper {
                 mode        : normalize(params.mode),
                 virus       : normalize(params.virus),
                 clair3_model: params.mode == "NANOPORE" ? normalize(params.clair3_model) : null,
+                clair3_qual : params.mode == "NANOPORE" ? normalize(params.clair3_qual) : null,
+                mapping_quality: params.mode == "NANOPORE" ? normalize(params.mapping_quality) : null,
                 af_threshold: params.mode == "NANOPORE" ? normalize(params.af_threshold) : null,
-                min_depth   : params.mode == "NANOPORE" ? normalize(params.np_min_depth) : normalize(params.depth)
+                min_depth   : params.mode == "NANOPORE" ? normalize(params.np_min_depth) : normalize(params.depth),
+                consensus_mask_rule: params.mode == "NANOPORE" ? "depth <= min_depth" : null
             ],
             parameters    : normalize(params.entrySet().collectEntries { entry ->
                 [(entry.key.toString()): entry.value]
