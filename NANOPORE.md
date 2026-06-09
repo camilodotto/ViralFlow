@@ -74,3 +74,14 @@ directory:
 Metadata collection is part of the workflow. Missing tools, unreadable inputs, or
 an invalid local container path cause the run to fail rather than recording
 incomplete provenance.
+
+## Truth integration test
+
+The deterministic FASTQ-to-consensus truth test is intentionally separate from
+the regular unit-test suite because it runs Porechop, Minimap2, Clair3,
+BCFtools, consensus generation, and Nanopore QC:
+
+```bash
+cd vfnext
+NXF_VER=25.04.6 nf-test test integration_tests/nanopore-truth.nf.test
+```

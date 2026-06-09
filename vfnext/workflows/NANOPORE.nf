@@ -80,6 +80,10 @@ workflow NANOPORE {
 
     emit:
         bams_ch = plot_bams_ch // tuple (meta, sorted_bam, bai, is_paired_end)
+        raw_vcfs_ch = run_clair3.out
+        filtered_vcfs_ch = run_bcftools.out
+        consensus_ch = run_bcftools_consensus.out
+        qc_ch = run_nanopore_qc.out
 }
 
 workflow {
