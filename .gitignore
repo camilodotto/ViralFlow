@@ -143,6 +143,7 @@ test/
 # mounted containers
 
 vfnext/containers/*.sif
+vfnext/containers/*.overlay
 vfnext/containers/*temp*
 vfnext/containers/singularity_snpeff.sif/*
 vfnext/containers/nextclade_dataset/sars-cov-2/*
