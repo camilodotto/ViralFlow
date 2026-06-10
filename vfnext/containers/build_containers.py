@@ -112,9 +112,21 @@ def main() -> int:
         action="store_true",
         help="Remove previously generated containers and overlays before rebuilding",
     )
+    parser.add_argument(
+        "--mksquashfs-processors",
+        type=int,
+        default=1,
+        metavar="N",
+        help=(
+            "Number of processors used to create SIF files (default: 1; "
+            "avoids crashes in recent bundled mksquashfs versions)"
+        ),
+    )
     args = parser.parse_args()
 
     arch = args.arch.strip()
+    if args.mksquashfs_processors < 1:
+        parser.error("--mksquashfs-processors must be at least 1")
 
     containers_dir = Path(__file__).resolve().parent  # .../vfnext/containers (pode ser /Users/... no Lima)
     vm_home = Path.home().resolve()                  # usado apenas em fallback legado abaixo
@@ -180,6 +192,8 @@ def main() -> int:
             "apptainer", "build",
             "-F",
             "--fakeroot",
+            "--mksquashfs-args",
+            f"-processors {args.mksquashfs_processors}",
             # "--sandbox",
             str(src),
             str(def_path),
