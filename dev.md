@@ -4,44 +4,38 @@ For computing environments with ARM64 architecture the user should inform the `-
 
 ## Installation
 
+### Automated installation
+
+The installer in this branch configures Apptainer, Micromamba, Nextflow,
+ViralFlow and the architecture-specific environment:
+
+```bash
+curl -fsSLO https://raw.githubusercontent.com/camilodotto/ViralFlow/develop-SIF3-MAC/install.sh
+chmod +x install.sh
+./install.sh
+```
+
+Supported environments:
+
+- Linux and WSL on AMD64;
+- Linux and Raspberry Pi OS 64-bit on ARM64;
+- macOS through an ARM64 Lima VM.
+
+The default checkout is `~/ViralFlow`, and the command is installed at
+`~/.local/bin/viralflow`. Use `./install.sh --help` to change these paths or
+skip the initial container build.
+
 ### AMD64
 
 ```bash
-git clone -b develop https://github.com/WallauBioinfo/ViralFlow.git
-cd ViralFlow/
-micromamba env create -f envs/amd64.yml
-micromamba activate viralflow
-pip install -e .
-sudo ln -s /usr/bin/unsquashfs /usr/local/bin/unsquashfs
-viralflow build-containers
+./install.sh --skip-containers
+viralflow build-containers --arch amd64
 ```
 
 ### ARM64
 
 ```bash
-# install singularity
-sudo apt update
-sudo apt install -y build-essential git wget pkg-config \
-    libseccomp-dev squashfs-tools cryptsetup \
-    libglib2.0-dev uuid-dev libssl-dev libgpgme-dev \
-    libarchive-dev runc golang
-
-git clone --recursive https://github.com/sylabs/singularity.git
-cd singularity
-git checkout v3.11.4
-git submodule update --init --recursive
-./mconfig
-make -C builddir
-sudo make -C builddir install
-
-# install viralflow wrapper
-git clone -b develop https://github.com/WallauBioinfo/ViralFlow.git
-cd ViralFlow/
-micromamba env create -f envs/arm64.yml
-micromamba activate viralflow
-pip install -e .
-
-# build containers
+./install.sh --skip-containers
 viralflow build-containers --arch arm64
 ```
 
