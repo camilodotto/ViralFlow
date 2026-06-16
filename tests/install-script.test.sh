@@ -14,6 +14,7 @@ run_dry_install() {
 
   mkdir -p "${home}"
   env -u MAMBA_ROOT_PREFIX \
+    -u SHELL \
     HOME="${home}" \
     bash "${INSTALLER}" \
       --dry-run \
@@ -24,10 +25,12 @@ run_dry_install() {
 
   grep -q "Platform: ${platform} ${architecture}" "${output}"
   grep -q "Repository: ${home}/ViralFlow" "${output}"
+  grep -q "Would ensure ${home}/.local/bin is in PATH through ${home}/.bashrc" "${output}"
 }
 
 bash -n "${INSTALLER}"
 bash "${INSTALLER}" --help | grep -q -- '--skip-containers'
+grep -q '"${BIN_DIR}/micromamba" run -n viralflow "${BIN_DIR}/nextflow" -version' "${INSTALLER}"
 
 run_dry_install linux amd64
 run_dry_install linux arm64

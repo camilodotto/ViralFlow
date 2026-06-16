@@ -519,8 +519,39 @@ verify_linux_installation() {
     "${BIN_DIR}/micromamba" --version
   PATH="${BIN_DIR}:${PATH}" MAMBA_ROOT_PREFIX="${MAMBA_ROOT_PREFIX}" \
     "${BIN_DIR}/micromamba" run -n viralflow viralflow --version
-  PATH="${BIN_DIR}:${PATH}" NXF_VER="${NEXTFLOW_VERSION}" nextflow -version
+  PATH="${BIN_DIR}:${PATH}" \
+    MAMBA_ROOT_PREFIX="${MAMBA_ROOT_PREFIX}" \
+    NXF_VER="${NEXTFLOW_VERSION}" \
+    "${BIN_DIR}/micromamba" run -n viralflow "${BIN_DIR}/nextflow" -version
   singularity --version
+}
+
+configure_user_path() {
+  case ":${PATH}:" in
+    *":${BIN_DIR}:"*) return ;;
+  esac
+
+  local files=("${HOME}/.bashrc")
+  if [[ -f "${HOME}/.zshrc" || "${SHELL:-}" == */zsh ]]; then
+    files+=("${HOME}/.zshrc")
+  fi
+
+  local file line
+  line="export PATH=\"${BIN_DIR}:\$PATH\""
+  for file in "${files[@]}"; do
+    if (( DRY_RUN )); then
+      log "Would ensure ${BIN_DIR} is in PATH through ${file}."
+      continue
+    fi
+    touch "${file}"
+    if ! grep -Fqx "${line}" "${file}"; then
+      {
+        printf '\n# Added by ViralFlow installer\n'
+        printf '%s\n' "${line}"
+      } >>"${file}"
+      log "Added ${BIN_DIR} to PATH in ${file}."
+    fi
+  done
 }
 
 install_linux() {
@@ -650,16 +681,11 @@ ViralFlow installation completed.
 Repository: ${REPO_DIR}
 Command:    ${BIN_DIR}/viralflow
 
-Ensure this directory is in your PATH:
+The installer added this directory to your shell PATH configuration when needed:
   ${BIN_DIR}
 
-For Bash:
-  echo 'export PATH="${BIN_DIR}:\$PATH"' >> ~/.bashrc
-  source ~/.bashrc
-
-For Zsh:
-  echo 'export PATH="${BIN_DIR}:\$PATH"' >> ~/.zshrc
-  source ~/.zshrc
+For the current terminal session, run:
+  export PATH="${BIN_DIR}:\$PATH"
 
 Example:
   viralflow run --params-file ${REPO_DIR}/test_files/sars-cov-2.params
@@ -696,6 +722,7 @@ main() {
       ;;
   esac
 
+  configure_user_path
   print_summary
 }
 
