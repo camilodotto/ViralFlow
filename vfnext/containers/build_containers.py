@@ -122,6 +122,14 @@ def main() -> int:
             "avoids crashes in recent bundled mksquashfs versions)"
         ),
     )
+    parser.add_argument(
+        "--staging-dir",
+        default=os.environ.get("VIRALFLOW_APPTAINER_STAGING_DIR", "/var/tmp/viralflow-apptainer"),
+        help=(
+            "Directory used for Apptainer temporary files, cache and workdir "
+            "(default: VIRALFLOW_APPTAINER_STAGING_DIR or /var/tmp/viralflow-apptainer)"
+        ),
+    )
     args = parser.parse_args()
 
     arch = args.arch.strip()
@@ -131,13 +139,18 @@ def main() -> int:
     containers_dir = Path(__file__).resolve().parent  # .../vfnext/containers (pode ser /Users/... no Lima)
     vm_home = Path.home().resolve()                  # usado apenas em fallback legado abaixo
 
-    # Staging sempre em /tmp para evitar builds em mounts compartilhados do macOS,
-    # mesmo quando o HOME da VM Lima estiver configurado como /Users/<usuario>.
-    base = Path("/tmp") / "viralflow-apptainer"
+    # Staging em disco, não em /tmp. Em várias VMs /tmp é tmpfs pequeno, e o
+    # build do Pangolin pode precisar de vários GB durante micromamba/pip.
+    base = Path(args.staging_dir).expanduser().resolve()
     tmpdir = base / "tmp"
     cachedir = base / "cache"
     workdir = base / "work" / f"build_{arch}"
 
+    # Failed Apptainer builds can leave partial rootfs/SIF data and corrupted
+    # package caches in the staging area. Start each run from a clean build
+    # workspace while preserving APPTAINER_CACHEDIR downloads.
+    cleanup_dir(tmpdir)
+    cleanup_dir(workdir)
     ensure_dir(tmpdir)
     ensure_dir(cachedir)
     ensure_dir(workdir)
@@ -204,6 +217,8 @@ def main() -> int:
             copy_container(src, dst)
             print(" > Done <")
         except subprocess.CalledProcessError as e:
+            remove_path(src)
+            cleanup_dir(tmpdir)
             print(" > Failed <")
             failed.append((image_name, " ".join(cmd)))
             eprint(f"Error: {e}")

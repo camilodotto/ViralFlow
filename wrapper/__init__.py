@@ -1,6 +1,7 @@
 from distutils.command.build_scripts import first_line_re
 from logging import root
 import os
+import shlex
 import json
 import re
 import shutil
@@ -181,7 +182,7 @@ def parse_csv(csv_flpath):
             entries_lst.append(entry)
     return entries_lst
 
-def build_containers(root_path, arch: str, clean: bool = False):
+def build_containers(root_path, arch: str, clean: bool = False, staging_dir=None):
     """
     run script to build container for vfnext
     """
@@ -189,11 +190,14 @@ def build_containers(root_path, arch: str, clean: bool = False):
         clean_containers(root_path, arch)
 
     # build containers
-    cd_to_dir= f"cd {root_path}/vfnext/containers/" 
-    build_sandbox = f"python ./build_containers.py {arch}"
+    containers_dir = Path(root_path) / "vfnext" / "containers"
+    cd_to_dir = f"cd {shlex.quote(str(containers_dir))}"
+    build_sandbox = f"python ./build_containers.py {shlex.quote(arch)}"
     if clean:
         build_sandbox += " --clean"
-    pull_containers = f"python ./pull_containers.py {arch}"
+    if staging_dir:
+        build_sandbox += f" --staging-dir {shlex.quote(staging_dir)}"
+    pull_containers = f"python ./pull_containers.py {shlex.quote(arch)}"
     os.system(cd_to_dir+';'+pull_containers) 
     print(cd_to_dir+';'+build_sandbox)
     os.system(cd_to_dir+';'+build_sandbox)

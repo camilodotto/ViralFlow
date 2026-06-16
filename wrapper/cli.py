@@ -53,9 +53,15 @@ def cli(ctx):
     default=False,
     help="Remove previously generated containers and overlays before rebuilding"
 )
-def build_containers(arch, clean):
+@click.option(
+    "--staging-dir",
+    default=None,
+    type=click.Path(file_okay=False, dir_okay=True),
+    help="Directory used for Apptainer temporary files and build workdir"
+)
+def build_containers(arch, clean, staging_dir):
     """Build containers for vfnext."""
-    _build_containers(VF_ROOT_PATH, arch, clean=clean)
+    _build_containers(VF_ROOT_PATH, arch, clean=clean, staging_dir=staging_dir)
 
 
 @cli.command("update-pangolin")
