@@ -595,6 +595,21 @@ ensure_lima_vm() {
   run limactl start "${LIMA_VM_NAME}"
 }
 
+validate_macos_shared_home_mount() {
+  local macos_home="${HOME}"
+  if (( DRY_RUN )); then
+    log "Would verify that ${macos_home} is mounted with write access inside Lima."
+    return
+  fi
+
+  limactl shell "${LIMA_VM_NAME}" -- /bin/bash -lc '
+    set -euo pipefail
+    test -d "$1"
+    test -w "$1"
+  ' bash "${macos_home}" ||
+    die "The macOS home directory (${macos_home}) is not mounted with write access inside the Lima VM."
+}
+
 write_macos_launcher() {
   local launcher="${BIN_DIR}/viralflow"
   run mkdir -p "${BIN_DIR}"
@@ -668,6 +683,7 @@ install_macos() {
   log "Installing for macOS through an ARM64 Lima VM."
   ensure_homebrew
   ensure_lima_vm
+  validate_macos_shared_home_mount
   run_installer_inside_lima
   write_macos_launcher
   (( DRY_RUN )) || "${BIN_DIR}/viralflow" --version

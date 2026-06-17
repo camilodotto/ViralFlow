@@ -285,9 +285,24 @@ Open a shell inside the VM:
 limactl shell viralflow
 ```
 
-Inside the Lima shell, follow the Linux ARM64 instructions above. The checkout
-and dependency paths may still be under your macOS home directory because Lima
-mounts it inside the VM.
+Inside the Lima shell, use the macOS home directory mounted inside the VM,
+not the VM's internal `$HOME`. This keeps the installation visible from both
+macOS and Linux:
+
+```bash
+export MACOS_HOME="/Users/your_user"
+export VIRALFLOW_REPO="$MACOS_HOME/ViralFlow"
+export VIRALFLOW_BIN="$MACOS_HOME/.local/bin"
+export MAMBA_ROOT_PREFIX="$MACOS_HOME/.local/share/viralflow/micromamba"
+export NXF_VER="22.04.0"
+
+test -d "$MACOS_HOME" && test -w "$MACOS_HOME"
+mkdir -p "$VIRALFLOW_BIN" "$MAMBA_ROOT_PREFIX"
+export PATH="$VIRALFLOW_BIN:$PATH"
+```
+
+Replace `/Users/your_user` with the value of `echo "$HOME"` on macOS. Then
+follow the Linux ARM64 instructions above using these paths.
 
 Optionally create a host-side launcher at `~/.local/bin/viralflow`:
 
@@ -296,15 +311,18 @@ mkdir -p "$HOME/.local/bin"
 cat > "$HOME/.local/bin/viralflow" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
+MACOS_HOME="$HOME"
 limactl start viralflow >/dev/null
 exec limactl shell viralflow -- /bin/bash -lc '
   set -euo pipefail
-  export MAMBA_ROOT_PREFIX="$HOME/.local/share/viralflow/micromamba"
+  macos_home="$1"
+  shift
+  export MAMBA_ROOT_PREFIX="${macos_home}/.local/share/viralflow/micromamba"
   export NXF_VER="22.04.0"
-  export PATH="$HOME/.local/bin:$PATH"
-  cd "$HOME/ViralFlow"
-  exec "$HOME/.local/bin/micromamba" run -n viralflow viralflow "$@"
-' bash "$@"
+  export PATH="${macos_home}/.local/bin:$PATH"
+  cd "${macos_home}/ViralFlow"
+  exec "${macos_home}/.local/bin/micromamba" run -n viralflow viralflow "$@"
+' bash "$MACOS_HOME" "$@"
 EOF
 chmod 755 "$HOME/.local/bin/viralflow"
 ```
