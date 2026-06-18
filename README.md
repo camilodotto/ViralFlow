@@ -285,26 +285,31 @@ Open a shell inside the VM:
 limactl shell viralflow
 ```
 
-Inside the Lima shell, use the macOS home directory mounted inside the VM,
-not the VM's internal `$HOME`. This keeps the installation visible from both
-macOS and Linux:
+Inside the Lima shell, keep the ViralFlow checkout in the mounted macOS home
+directory, but install Linux-only dependencies in a fixed directory on the
+VM's internal filesystem:
 
 ```bash
 export MACOS_HOME="/Users/your_user"
 export VIRALFLOW_REPO="$MACOS_HOME/ViralFlow"
-export VIRALFLOW_BIN="$MACOS_HOME/.local/bin"
-export MAMBA_ROOT_PREFIX="$MACOS_HOME/.local/share/viralflow/micromamba"
+export VIRALFLOW_INSTALL_ROOT="/var/lib/viralflow"
+export VIRALFLOW_BIN="$VIRALFLOW_INSTALL_ROOT/bin"
+export MAMBA_ROOT_PREFIX="$VIRALFLOW_INSTALL_ROOT/micromamba"
 export NXF_VER="22.04.0"
 
 test -d "$MACOS_HOME" && test -w "$MACOS_HOME"
-mkdir -p "$VIRALFLOW_BIN" "$MAMBA_ROOT_PREFIX"
+sudo install -d -o "$(id -u)" -g "$(id -g)" \
+  "$VIRALFLOW_INSTALL_ROOT" "$VIRALFLOW_BIN"
+mkdir -p "$MAMBA_ROOT_PREFIX"
 export PATH="$VIRALFLOW_BIN:$PATH"
 ```
 
 Replace `/Users/your_user` with the value of `echo "$HOME"` on macOS. Then
-follow the Linux ARM64 instructions above using these paths.
+follow the Linux ARM64 instructions above using these paths. This places
+Micromamba, Nextflow and the `viralflow` environment under `/var/lib/viralflow`
+inside Lima. Only the repository remains in the macOS home directory.
 
-Optionally create a host-side launcher at `~/.local/bin/viralflow`:
+Create a host-side launcher at `~/.local/bin/viralflow`:
 
 ```bash
 mkdir -p "$HOME/.local/bin"
@@ -317,11 +322,11 @@ exec limactl shell viralflow -- /bin/bash -lc '
   set -euo pipefail
   macos_home="$1"
   shift
-  export MAMBA_ROOT_PREFIX="${macos_home}/.local/share/viralflow/micromamba"
+  export MAMBA_ROOT_PREFIX="/var/lib/viralflow/micromamba"
   export NXF_VER="22.04.0"
-  export PATH="${macos_home}/.local/bin:$PATH"
+  export PATH="/var/lib/viralflow/bin:$PATH"
   cd "${macos_home}/ViralFlow"
-  exec "${macos_home}/.local/bin/micromamba" run -n viralflow viralflow "$@"
+  exec "/var/lib/viralflow/bin/micromamba" run -n viralflow viralflow "$@"
 ' bash "$MACOS_HOME" "$@"
 EOF
 chmod 755 "$HOME/.local/bin/viralflow"

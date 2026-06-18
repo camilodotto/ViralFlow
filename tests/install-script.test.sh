@@ -26,6 +26,12 @@ run_dry_install() {
   grep -q "Platform: ${platform} ${architecture}" "${output}"
   grep -q "Repository: ${home}/ViralFlow" "${output}"
   grep -q "Would ensure ${home}/.local/bin is in PATH through ${home}/.bashrc" "${output}"
+  if [[ "${platform}" == "macos" ]]; then
+    grep -q "Would verify that ${home} is mounted with write access inside Lima" "${output}"
+    grep -q "Would create /var/lib/viralflow inside Lima" "${output}"
+    grep -q -- '--install-root /var/lib/viralflow' "${output}"
+    grep -q -- '--bin-dir /var/lib/viralflow/bin' "${output}"
+  fi
 }
 
 bash -n "${INSTALLER}"

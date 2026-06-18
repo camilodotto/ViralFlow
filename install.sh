@@ -6,6 +6,7 @@ DEFAULT_REPOSITORY="https://github.com/camilodotto/ViralFlow.git"
 DEFAULT_BRANCH="develop-SIF3-MAC"
 DEFAULT_NEXTFLOW_VERSION="22.04.0"
 DEFAULT_LIMA_VM_NAME="viralflow"
+DEFAULT_LIMA_INSTALL_ROOT="/var/lib/viralflow"
 
 REPOSITORY="${VIRALFLOW_REPOSITORY:-${DEFAULT_REPOSITORY}}"
 BRANCH="${VIRALFLOW_BRANCH:-${DEFAULT_BRANCH}}"
@@ -15,6 +16,9 @@ BIN_DIR="${VIRALFLOW_BIN_DIR:-${HOME}/.local/bin}"
 MAMBA_ROOT_PREFIX="${VIRALFLOW_MAMBA_ROOT_PREFIX:-${INSTALL_ROOT}/micromamba}"
 NEXTFLOW_VERSION="${NEXTFLOW_VERSION:-${DEFAULT_NEXTFLOW_VERSION}}"
 LIMA_VM_NAME="${VIRALFLOW_LIMA_VM_NAME:-${DEFAULT_LIMA_VM_NAME}}"
+LIMA_INSTALL_ROOT="${VIRALFLOW_LIMA_INSTALL_ROOT:-${DEFAULT_LIMA_INSTALL_ROOT}}"
+LIMA_BIN_DIR="${LIMA_INSTALL_ROOT}/bin"
+LIMA_MAMBA_ROOT_PREFIX="${LIMA_INSTALL_ROOT}/micromamba"
 
 BUILD_CONTAINERS=1
 UPDATE_REPOSITORY=1
@@ -70,6 +74,8 @@ Options:
   --install-root PATH      Dependency data directory
                            (default: ~/.local/share/viralflow)
   --bin-dir PATH           User commands directory (default: ~/.local/bin)
+  --lima-install-root PATH Linux dependency directory inside Lima
+                           (default: ${DEFAULT_LIMA_INSTALL_ROOT})
   --repository URL         Git repository to clone
   --branch NAME            Git branch to install (default: ${DEFAULT_BRANCH})
   --nextflow-version VER   Nextflow version used by ViralFlow
@@ -82,7 +88,8 @@ Options:
 Environment variables:
   VIRALFLOW_REPOSITORY, VIRALFLOW_BRANCH, VIRALFLOW_REPO_DIR,
   VIRALFLOW_INSTALL_ROOT, VIRALFLOW_BIN_DIR, VIRALFLOW_MAMBA_ROOT_PREFIX,
-  NEXTFLOW_VERSION, APPTAINER_VERSION, VIRALFLOW_LIMA_VM_NAME
+  NEXTFLOW_VERSION, APPTAINER_VERSION, VIRALFLOW_LIMA_VM_NAME,
+  VIRALFLOW_LIMA_INSTALL_ROOT
 
 Supported platforms:
   Linux/WSL amd64, Linux/WSL arm64, and macOS through Lima.
@@ -103,6 +110,12 @@ parse_arguments() {
         ;;
       --bin-dir)
         BIN_DIR="${2:?Missing value for --bin-dir}"
+        shift 2
+        ;;
+      --lima-install-root)
+        LIMA_INSTALL_ROOT="${2:?Missing value for --lima-install-root}"
+        LIMA_BIN_DIR="${LIMA_INSTALL_ROOT}/bin"
+        LIMA_MAMBA_ROOT_PREFIX="${LIMA_INSTALL_ROOT}/micromamba"
         shift 2
         ;;
       --repository)
@@ -527,6 +540,8 @@ verify_linux_installation() {
 }
 
 configure_user_path() {
+  (( INSIDE_LIMA )) && return
+
   case ":${PATH}:" in
     *":${BIN_DIR}:"*) return ;;
   esac
@@ -610,6 +625,20 @@ validate_macos_shared_home_mount() {
     die "The macOS home directory (${macos_home}) is not mounted with write access inside the Lima VM."
 }
 
+prepare_lima_install_root() {
+  if (( DRY_RUN )); then
+    log "Would create ${LIMA_INSTALL_ROOT} inside Lima for Linux-only dependencies."
+    return
+  fi
+
+  limactl shell "${LIMA_VM_NAME}" -- /bin/bash -lc '
+    set -euo pipefail
+    install_root="$1"
+    bin_dir="$2"
+    sudo install -d -o "$(id -u)" -g "$(id -g)" "$install_root" "$bin_dir"
+  ' bash "${LIMA_INSTALL_ROOT}" "${LIMA_BIN_DIR}"
+}
+
 write_macos_launcher() {
   local launcher="${BIN_DIR}/viralflow"
   run mkdir -p "${BIN_DIR}"
@@ -622,8 +651,9 @@ write_macos_launcher() {
 #!/usr/bin/env bash
 set -euo pipefail
 VM_NAME=$(printf '%q' "${LIMA_VM_NAME}")
-BIN_DIR=$(printf '%q' "${BIN_DIR}")
-MAMBA_ROOT_PREFIX=$(printf '%q' "${MAMBA_ROOT_PREFIX}")
+LIMA_BIN_DIR=$(printf '%q' "${LIMA_BIN_DIR}")
+LIMA_MAMBA_ROOT_PREFIX=$(printf '%q' "${LIMA_MAMBA_ROOT_PREFIX}")
+REPO_DIR=$(printf '%q' "${REPO_DIR}")
 
 limactl start "\${VM_NAME}" >/dev/null
 exec limactl shell "\${VM_NAME}" -- /bin/bash -lc '
@@ -637,7 +667,7 @@ exec limactl shell "\${VM_NAME}" -- /bin/bash -lc '
   export NXF_VER=$(printf '%q' "${NEXTFLOW_VERSION}")
   export PATH="\${bin_dir}:\${PATH}"
   exec "\${bin_dir}/micromamba" run -n viralflow viralflow "\$@"
-' bash "\${PWD}" "\${BIN_DIR}" "\${MAMBA_ROOT_PREFIX}" "\$@"
+' bash "\${REPO_DIR}" "\${LIMA_BIN_DIR}" "\${LIMA_MAMBA_ROOT_PREFIX}" "\$@"
 EOF
   chmod 755 "${launcher}"
 }
@@ -661,8 +691,8 @@ run_installer_inside_lima() {
     --platform linux
     --arch arm64
     --repo-dir "${REPO_DIR}"
-    --install-root "${INSTALL_ROOT}"
-    --bin-dir "${BIN_DIR}"
+    --install-root "${LIMA_INSTALL_ROOT}"
+    --bin-dir "${LIMA_BIN_DIR}"
     --repository "${REPOSITORY}"
     --branch "${BRANCH}"
     --nextflow-version "${NEXTFLOW_VERSION}"
@@ -684,6 +714,7 @@ install_macos() {
   ensure_homebrew
   ensure_lima_vm
   validate_macos_shared_home_mount
+  prepare_lima_install_root
   run_installer_inside_lima
   write_macos_launcher
   (( DRY_RUN )) || "${BIN_DIR}/viralflow" --version
@@ -714,6 +745,9 @@ main() {
   REPO_DIR="$(normalize_path "${REPO_DIR}")"
   BIN_DIR="$(normalize_path "${BIN_DIR}")"
   MAMBA_ROOT_PREFIX="$(normalize_path "${MAMBA_ROOT_PREFIX}")"
+  LIMA_INSTALL_ROOT="$(normalize_path "${LIMA_INSTALL_ROOT}")"
+  LIMA_BIN_DIR="${LIMA_INSTALL_ROOT}/bin"
+  LIMA_MAMBA_ROOT_PREFIX="${LIMA_INSTALL_ROOT}/micromamba"
 
   local platform architecture
   platform="$(detect_platform)"
