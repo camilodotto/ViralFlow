@@ -5,10 +5,10 @@
 Este documento resume as diferenças de código entre:
 
 - base: `WallauBioinfo/develop` (`16cb3f3`);
-- fork analisado: `origin/develop-SIF3-MAC` (`f1d3a5f`).
+- fork analisado: `origin/develop-SIF3-MAC` (`cc2a62d`).
 
 A comparação foi feita a partir do ancestral comum dos branches. No momento da
-análise, o fork continha 63 commits adicionais e não havia commits do upstream
+análise, o fork continha 65 commits adicionais e não havia commits do upstream
 pendentes de incorporação.
 
 Arquivos exclusivamente documentais não foram analisados. O `README.md` e o
@@ -35,6 +35,8 @@ As alterações do fork estão concentradas nos seguintes pontos:
    - Migração da lógica de construção para comandos estruturados de Apptainer.
    - Remoção do fallback operacional para Singularity nos fluxos de wrapper,
      pull, build e personalização de bancos.
+   - Download de contêineres com retentativas configuráveis e remoção de SIFs
+     parciais após falhas.
    - Geração de imagens SIF em vez de sandboxes graváveis.
    - Criação de overlays persistentes separados para Pangolin e snpEff.
    - Opções para limpeza dos artefatos e controle da quantidade de processos do
@@ -244,6 +246,12 @@ construção. Singularity não satisfaz mais esse fluxo.
 - Remove a dependência direta da biblioteca `spython` para o pull de imagens.
 - Passa a exigir o executável `apptainer`.
 - Substitui `singularity pull` por `apptainer pull -F`.
+- Adiciona retentativas configuráveis para download de contêineres:
+  - `VIRALFLOW_CONTAINER_PULL_RETRIES`, com padrão `3`;
+  - `VIRALFLOW_CONTAINER_PULL_RETRY_DELAY`, com padrão de 10 segundos.
+- Remove arquivos SIF parciais antes de tentar novamente após uma falha de
+  download.
+- Mostra no log a tentativa atual e o total de tentativas configurado.
 - Usa `subprocess.check_call` com lista de argumentos, evitando montagem de
   comandos por string.
 - Passa a reportar falha quando algum contêiner obrigatório não é baixado após
