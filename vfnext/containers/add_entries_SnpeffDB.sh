@@ -18,10 +18,8 @@ EFETCH_CTNR="edirect:1.1.0.sif"
 
 if command -v apptainer >/dev/null 2>&1; then
     CONTAINER_RUNTIME="apptainer"
-elif command -v singularity >/dev/null 2>&1; then
-    CONTAINER_RUNTIME="singularity"
 else
-    echo "ERROR: apptainer/singularity executable not found."
+    echo "ERROR: apptainer executable not found."
     exit 1
 fi
 

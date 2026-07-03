@@ -135,6 +135,9 @@ def main() -> int:
     arch = args.arch.strip()
     if args.mksquashfs_processors < 1:
         parser.error("--mksquashfs-processors must be at least 1")
+    if not shutil.which("apptainer"):
+        eprint("ERROR: apptainer executable not found. Install Apptainer before building containers.")
+        return 1
 
     containers_dir = Path(__file__).resolve().parent  # .../vfnext/containers (pode ser /Users/... no Lima)
     vm_home = Path.home().resolve()                  # usado apenas em fallback legado abaixo

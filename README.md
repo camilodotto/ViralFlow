@@ -28,6 +28,10 @@ The installer supports Linux/WSL AMD64, Linux/WSL ARM64 and macOS through a
 Lima ARM64 virtual machine. By default, it installs the `viralflow` command in
 `~/.local/bin`.
 
+Apptainer is required. A pre-existing Singularity CE installation is not enough
+for this branch, because local container build and update commands call
+`apptainer` directly.
+
 To install without downloading and building the containers immediately:
 
 ```bash
@@ -152,10 +156,10 @@ EOF
 chmod 755 "$VIRALFLOW_BIN/viralflow"
 ```
 
-Configure Apptainer compatibility links and fakeroot:
+Configure the `unsquashfs` compatibility link, Apptainer fakeroot and the
+SylabsCloud remote:
 
 ```bash
-sudo ln -sf "$(command -v apptainer)" /usr/local/bin/singularity
 sudo ln -sf "$(command -v unsquashfs)" /usr/local/bin/unsquashfs
 sudo apptainer config fakeroot --add "$(id -un)"
 apptainer remote add --no-login SylabsCloud cloud.sylabs.io || true
@@ -200,7 +204,6 @@ chmod 755 /tmp/install-apptainer-unprivileged.sh
 sudo bash /tmp/install-apptainer-unprivileged.sh \
   -d "debian${VERSION_ID%%.*}" -a aarch64 -v "$APPTAINER_VERSION" "$INSTALL_ROOT"
 sudo ln -sf "$INSTALL_ROOT/bin/apptainer" /usr/local/bin/apptainer
-sudo ln -sf "$INSTALL_ROOT/bin/singularity" /usr/local/bin/singularity
 ```
 
 Install the ARM64 Micromamba binary:

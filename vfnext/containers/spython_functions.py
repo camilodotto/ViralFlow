@@ -1,5 +1,6 @@
-from spython.main import Client
 import os
+import shutil
+import subprocess
 
 
 def get_repository(repository_list):
@@ -21,11 +22,17 @@ def get_repository(repository_list):
 
 
 def container_pull(containers_dir, containers_name_list):
+    if not shutil.which("apptainer"):
+        raise RuntimeError("apptainer executable not found. Install Apptainer before building containers.")
+
     for container in containers_name_list:
         container_version = container[1]
         full_repo = container[2]
         print(f"Downloading container {container_version}. This could be take a while. Please Wait ...")
-        os.system(f"singularity pull -F {container_version}.sif library://{full_repo}")  
+        subprocess.check_call(
+            ["apptainer", "pull", "-F", f"{container_version}.sif", f"library://{full_repo}"],
+            cwd=containers_dir,
+        )
 
 
 
@@ -50,4 +57,6 @@ def containers_routine_pull(missing_containers_list, containers_dir, containers_
         attempts -= 1
         if len(lost_containers) == 0:
             break
-
+    if lost_containers:
+        missing = ", ".join(container[1] for container in lost_containers)
+        raise RuntimeError(f"Failed to download required containers: {missing}")

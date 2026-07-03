@@ -249,10 +249,6 @@ ensure_runtime_links() {
   apptainer_bin="$(command -v apptainer || true)"
   [[ -n "${apptainer_bin}" ]] || die "Apptainer was not found after installation."
 
-  if ! command -v singularity >/dev/null 2>&1; then
-    run_as_root ln -sf "${apptainer_bin}" /usr/local/bin/singularity
-  fi
-
   unsquashfs_bin="$(command -v unsquashfs || true)"
   if [[ -n "${unsquashfs_bin}" && ! -x /usr/local/bin/unsquashfs ]]; then
     run_as_root ln -sf "${unsquashfs_bin}" /usr/local/bin/unsquashfs
@@ -288,7 +284,6 @@ install_apptainer_debian() {
         -d "debian${debian_major}" -a aarch64 -v "${version}" "${install_root}"
     fi
     run_as_root ln -sf "${install_root}/bin/apptainer" /usr/local/bin/apptainer
-    run_as_root ln -sf "${install_root}/bin/singularity" /usr/local/bin/singularity
     return
   fi
 
@@ -536,7 +531,7 @@ verify_linux_installation() {
     MAMBA_ROOT_PREFIX="${MAMBA_ROOT_PREFIX}" \
     NXF_VER="${NEXTFLOW_VERSION}" \
     "${BIN_DIR}/micromamba" run -n viralflow "${BIN_DIR}/nextflow" -version
-  singularity --version
+  apptainer --version
 }
 
 configure_user_path() {

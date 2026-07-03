@@ -6,16 +6,16 @@ import json
 import re
 import shutil
 import subprocess
+import sys
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 from pathlib import Path
 
 
 def _get_container_runtime():
-    for runtime in ("apptainer", "singularity"):
-        if shutil.which(runtime):
-            return runtime
-    raise RuntimeError("apptainer/singularity executable not found.")
+    if shutil.which("apptainer"):
+        return "apptainer"
+    raise RuntimeError("apptainer executable not found.")
 
 
 def _run(command, cwd=None):
@@ -189,18 +189,16 @@ def build_containers(root_path, arch: str, clean: bool = False, staging_dir=None
     if clean:
         clean_containers(root_path, arch)
 
-    # build containers
     containers_dir = Path(root_path) / "vfnext" / "containers"
-    cd_to_dir = f"cd {shlex.quote(str(containers_dir))}"
-    build_sandbox = f"python ./build_containers.py {shlex.quote(arch)}"
+    build_sandbox = [sys.executable, "./build_containers.py", arch]
     if clean:
-        build_sandbox += " --clean"
+        build_sandbox.append("--clean")
     if staging_dir:
-        build_sandbox += f" --staging-dir {shlex.quote(staging_dir)}"
-    pull_containers = f"python ./pull_containers.py {shlex.quote(arch)}"
-    os.system(cd_to_dir+';'+pull_containers) 
-    print(cd_to_dir+';'+build_sandbox)
-    os.system(cd_to_dir+';'+build_sandbox)
+        build_sandbox.extend(["--staging-dir", staging_dir])
+    pull_containers = [sys.executable, "./pull_containers.py", arch]
+    subprocess.check_call(pull_containers, cwd=str(containers_dir))
+    print(" ".join(shlex.quote(arg) for arg in build_sandbox))
+    subprocess.check_call(build_sandbox, cwd=str(containers_dir))
     
 
 # input args file load
