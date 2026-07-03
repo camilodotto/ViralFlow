@@ -5,10 +5,10 @@
 Este documento resume as diferenças de código entre:
 
 - base: `WallauBioinfo/develop` (`16cb3f3`);
-- fork analisado: `origin/develop-SIF3-MAC` (`df6800d`).
+- fork analisado: `origin/develop-SIF3-MAC` (`f1d3a5f`).
 
 A comparação foi feita a partir do ancestral comum dos branches. No momento da
-análise, o fork continha 61 commits adicionais e não havia commits do upstream
+análise, o fork continha 63 commits adicionais e não havia commits do upstream
 pendentes de incorporação.
 
 Arquivos exclusivamente documentais não foram analisados. O `README.md` e o
@@ -21,7 +21,10 @@ As alterações do fork estão concentradas nos seguintes pontos:
 
 1. **Compatibilidade com Linux, macOS/Lima e arquiteturas amd64/arm64**
    - Separação entre dependências Python/Conda e ferramentas instaladas
-     externamente, especialmente Nextflow e Apptainer.
+     externamente, especialmente Nextflow.
+   - Apptainer passou a ser requisito obrigatório para construção, download,
+     atualização e execução dos contêineres. Singularity não é mais considerado
+     runtime suficiente para este fork.
    - Construção dos contêineres em uma área temporária localizada no sistema de
      arquivos Linux, evitando limitações de diretórios compartilhados pelo
      macOS.
@@ -30,6 +33,8 @@ As alterações do fork estão concentradas nos seguintes pontos:
 
 2. **Reestruturação da construção e manutenção dos contêineres**
    - Migração da lógica de construção para comandos estruturados de Apptainer.
+   - Remoção do fallback operacional para Singularity nos fluxos de wrapper,
+     pull, build e personalização de bancos.
    - Geração de imagens SIF em vez de sandboxes graváveis.
    - Criação de overlays persistentes separados para Pangolin e snpEff.
    - Opções para limpeza dos artefatos e controle da quantidade de processos do
@@ -74,8 +79,8 @@ As alterações do fork estão concentradas nos seguintes pontos:
 
 - Nextflow e SingularityCE foram removidos do ambiente Conda ativo.
 - As demais dependências usadas pelo wrapper e pela pipeline foram mantidas.
-- A intenção é instalar Nextflow e Apptainer separadamente, evitando conflitos
-  de bibliotecas no ambiente Conda.
+- A intenção é instalar Nextflow separadamente e exigir Apptainer como runtime
+  de contêineres, evitando conflitos de bibliotecas no ambiente Conda.
 
 #### `envs/arm64.yml`
 
@@ -186,7 +191,9 @@ O script foi amplamente reestruturado:
   `/var/tmp/viralflow-apptainer`;
 - separa diretórios temporários, cache e workdir;
 - limpa `tmpdir` e `workdir` antes de cada construção, preservando o cache;
-- direciona as variáveis de ambiente de Apptainer e Singularity para o staging;
+- direciona as variáveis de ambiente de Apptainer para o staging;
+- mantém variáveis `SINGULARITY_*` apenas como compatibilidade ambiental
+  herdada, mas o executável exigido pelo script é `apptainer`;
 - constrói os SIFs no sistema de arquivos Linux e depois os copia para o
   repositório, o que atende ao uso do repositório em um volume macOS montado no
   Lima;
@@ -201,9 +208,8 @@ O script foi amplamente reestruturado:
 - verifica a disponibilidade de `unsquashfs`;
 - retorna códigos de erro em falhas, em vez de apenas imprimir o resultado.
 
-Observação para os mantenedores: o script final usa diretamente o comando
-`apptainer`, enquanto outras partes do fork aceitam `apptainer` ou
-`singularity`. Convém decidir se Apptainer será um requisito formal.
+O script verifica explicitamente a presença do executável `apptainer` antes da
+construção. Singularity não satisfaz mais esse fluxo.
 
 #### `vfnext/containers/build_containers_original.py`
 
@@ -223,7 +229,7 @@ Observação para os mantenedores: o script final usa diretamente o comando
 #### `vfnext/containers/add_entries_SnpeffDB.sh`
 
 - Ativa execução estrita do shell com `set -euo pipefail`.
-- Detecta Apptainer ou Singularity em tempo de execução.
+- Exige o executável `apptainer`; Singularity não é mais aceito como fallback.
 - valida argumentos, imagens e overlay antes de iniciar;
 - detecta o diretório interno do snpEff executando comandos no contêiner, em vez
   de acessar a imagem como diretório;
@@ -232,6 +238,16 @@ Observação para os mantenedores: o script final usa diretamente o comando
 - usa diretório temporário com limpeza automática;
 - baixa o registro de referência pelo contêiner do EDirect;
 - reconstrói o banco e atualiza o catálogo após a inclusão.
+
+#### `vfnext/containers/spython_functions.py`
+
+- Remove a dependência direta da biblioteca `spython` para o pull de imagens.
+- Passa a exigir o executável `apptainer`.
+- Substitui `singularity pull` por `apptainer pull -F`.
+- Usa `subprocess.check_call` com lista de argumentos, evitando montagem de
+  comandos por string.
+- Passa a reportar falha quando algum contêiner obrigatório não é baixado após
+  as tentativas previstas.
 
 #### `vfnext/containers/def_files/amd64/Singularity_pangolin`
 
@@ -270,7 +286,8 @@ Observação para os mantenedores: o script final usa diretamente o comando
 
 As principais alterações são:
 
-- detecção automática de `apptainer` ou `singularity`;
+- exigência explícita de `apptainer`; Singularity não é mais runtime aceito pelo
+  wrapper;
 - funções auxiliares para executar comandos, criar overlays e remover artefatos;
 - execução do script de personalização do snpEff com argumentos estruturados;
 - limpeza de imagens, overlays e catálogo por arquitetura;
@@ -342,8 +359,8 @@ Não foram considerados na análise funcional:
 
 ## Pontos sugeridos para revisão antes da integração
 
-1. Definir se Apptainer será obrigatório ou se todos os fluxos devem manter
-   compatibilidade com Singularity.
+1. Comunicar explicitamente aos usuários e mantenedores que Apptainer é
+   obrigatório e que Singularity não satisfaz mais as dependências deste fork.
 2. Remover ou mover para histórico os arquivos
    `build_containers_original.py` e `build_containers_alterado.py`.
 3. Confirmar se os arquivos `*-legado.yml` devem permanecer no repositório
