@@ -1,6 +1,11 @@
 import os
 import shutil
 import subprocess
+import time
+
+
+PULL_RETRIES = int(os.environ.get("VIRALFLOW_CONTAINER_PULL_RETRIES", "3"))
+PULL_RETRY_DELAY_SECONDS = int(os.environ.get("VIRALFLOW_CONTAINER_PULL_RETRY_DELAY", "10"))
 
 
 def get_repository(repository_list):
@@ -28,11 +33,28 @@ def container_pull(containers_dir, containers_name_list):
     for container in containers_name_list:
         container_version = container[1]
         full_repo = container[2]
-        print(f"Downloading container {container_version}. This could be take a while. Please Wait ...")
-        subprocess.check_call(
-            ["apptainer", "pull", "-F", f"{container_version}.sif", f"library://{full_repo}"],
-            cwd=containers_dir,
-        )
+        output_file = os.path.join(containers_dir, f"{container_version}.sif")
+        for attempt in range(1, PULL_RETRIES + 1):
+            print(
+                f"Downloading container {container_version} "
+                f"(attempt {attempt}/{PULL_RETRIES}). This could take a while. Please wait ..."
+            )
+            try:
+                subprocess.check_call(
+                    ["apptainer", "pull", "-F", f"{container_version}.sif", f"library://{full_repo}"],
+                    cwd=containers_dir,
+                )
+                break
+            except subprocess.CalledProcessError:
+                if os.path.exists(output_file):
+                    os.remove(output_file)
+                if attempt == PULL_RETRIES:
+                    raise
+                print(
+                    f"Download failed for {container_version}; retrying in "
+                    f"{PULL_RETRY_DELAY_SECONDS} seconds ..."
+                )
+                time.sleep(PULL_RETRY_DELAY_SECONDS)
 
 
 
