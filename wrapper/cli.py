@@ -127,9 +127,15 @@ def add_entry_to_snpeff(org_name, genome_code, arch):
     default=3,
     help="Standard accuracy level for dedup mode on fastp"
 )
-def run(params_file, dedup, ndedup):
+@click.option(
+    "--arch",
+    default="amd64",
+    type=click.Choice(["amd64", "arm64"], case_sensitive=False),
+    help="System architecture used to build the containers"
+)
+def run(params_file, dedup, ndedup, arch):
     click.echo(f"ViralFlow v{__version__}")
-    _run_vfnext(VF_ROOT_PATH, params_file)
+    _run_vfnext(VF_ROOT_PATH, params_file, arch)
 
 
 if __name__ == "__main__":

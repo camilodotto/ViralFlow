@@ -109,6 +109,117 @@ def add_entries_to_DB(root_path, org_name, refseq_code, arch):
     subprocess.check_call(run_bash)
 
 
+def _snpeff_paths(root_path):
+    containers_dir = Path(root_path) / "vfnext" / "containers"
+    return {
+        "containers_dir": containers_dir,
+        "container": containers_dir / "snpeff:5.0.sif",
+        "overlay": containers_dir / "snpeff_5.0.overlay",
+        "catalog": containers_dir / "snpEff_DB.catalog",
+    }
+
+
+def _snpeff_catalog_entries(catalog_path: Path, genome_code: str):
+    if not catalog_path.exists():
+        return []
+
+    entries = []
+    for line in catalog_path.read_text(encoding="utf-8").splitlines():
+        fields = line.replace(" ", "").split("\t")
+        if len(fields) < 5:
+            continue
+        if genome_code in fields[0]:
+            entries.append(fields)
+    return entries
+
+
+def _snpeff_db_is_installed(root_path, genome_code: str):
+    runtime = _get_container_runtime()
+    paths = _snpeff_paths(root_path)
+
+    if not paths["container"].exists():
+        raise RuntimeError(f"snpEff container not found: {paths['container']}")
+    if not paths["overlay"].exists():
+        raise RuntimeError(f"snpEff overlay not found: {paths['overlay']}")
+
+    check_script = """
+for d in \
+    /opt/conda/share/snpeff-5.0-3/data \
+    /opt/conda/share/snpeff-5.0-2/data \
+    /opt/conda/share/snpeff/data \
+    /usr/local/bin/mm/share/snpeff-5.0-3/data \
+    /usr/local/bin/mm/share/snpeff-5.0-2/data \
+    /usr/local/bin/mm/share/snpeff/data
+do
+    if [ -d "$d/$1" ]; then
+        exit 0
+    fi
+done
+exit 1
+"""
+    result = subprocess.run(
+        [
+            runtime,
+            "exec",
+            "--overlay",
+            f"{paths['overlay']}:ro",
+            str(paths["container"]),
+            "sh",
+            "-c",
+            check_script,
+            "sh",
+            genome_code,
+        ],
+        cwd=str(paths["containers_dir"]),
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        check=False,
+    )
+    return result.returncode == 0
+
+
+def _bool_param(value):
+    return str(value).strip().lower() in {"true", "1", "yes", "y"}
+
+
+def _snpeff_genome_code_from_params(params):
+    if not _bool_param(params.get("runSnpEff", "false")):
+        return None
+
+    if params.get("virus") == "sars-cov2":
+        return "NC_045512.2"
+
+    return params.get("refGenomeCode")
+
+
+def ensure_snpeff_db_for_run(root_path, params, arch: str = "amd64"):
+    genome_code = _snpeff_genome_code_from_params(params)
+    if not genome_code:
+        return
+
+    paths = _snpeff_paths(root_path)
+    catalog_entries = _snpeff_catalog_entries(paths["catalog"], genome_code)
+    installed = _snpeff_db_is_installed(root_path, genome_code)
+
+    if catalog_entries and installed:
+        return
+
+    if catalog_entries:
+        organism_name = catalog_entries[0][1] or genome_code
+        print(
+            f"snpEff genome {genome_code} is cataloged but not installed; "
+            "preparing database in the writable overlay."
+        )
+    else:
+        organism_name = genome_code
+        print(
+            f"snpEff genome {genome_code} was not found in the local catalog; "
+            "adding it to the writable overlay before running ViralFlow."
+        )
+
+    add_entries_to_DB(root_path, organism_name, genome_code, arch)
+
+
 def _container_names_from_repository_file(repository_file: Path):
     if not repository_file.exists():
         return []
@@ -202,7 +313,7 @@ def build_containers(root_path, arch: str, clean: bool = False, staging_dir=None
     
 
 # input args file load
-def parse_params(in_flpath):
+def load_params(in_flpath):
     """
     load text file containing viralflow arguments
     """
@@ -270,8 +381,13 @@ def parse_params(in_flpath):
             if len(vls) > 1:
                 dct[key] = vls
             continue
+    return dct
+
+
+def parse_params(in_flpath):
+    dct = load_params(in_flpath)
+
     # get arguments for nextflow
-    
     args_str = ""
     for key in dct:
         args_str += f"--{key} {dct[key]} "
@@ -376,8 +492,10 @@ def update_pangolin_data(root_path):
         cwd=containers_dir,
     )
 
-def run_vfnext(root_path, params_fl):
+def run_vfnext(root_path, params_fl, arch: str = "amd64"):
     # get nextflow arguments
+    params = load_params(params_fl)
+    ensure_snpeff_db_for_run(root_path, params, arch)
     args_str = parse_params(params_fl)
     nxtflw_ver = os.environ.get("NXF_VER", "22.04.0")
     run_nxtfl_cmd = f"NXF_VER={nxtflw_ver} nextflow run {root_path}/vfnext/main.nf {args_str}"
