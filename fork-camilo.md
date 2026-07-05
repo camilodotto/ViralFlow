@@ -5,10 +5,10 @@
 Este documento resume as diferenças de código entre:
 
 - base: `WallauBioinfo/develop` (`16cb3f3`);
-- fork analisado: `origin/develop-SIF3-MAC` (`cc2a62d`).
+- fork analisado: `origin/develop-SIF3-MAC` (`537cf8e`).
 
 A comparação foi feita a partir do ancestral comum dos branches. No momento da
-análise, o fork continha 65 commits adicionais e não havia commits do upstream
+análise, o fork continha 67 commits adicionais e não havia commits do upstream
 pendentes de incorporação.
 
 Arquivos exclusivamente documentais não foram analisados. O `README.md` e o
@@ -55,6 +55,10 @@ As alterações do fork estão concentradas nos seguintes pontos:
      imagem SIF.
    - A pipeline verifica se o código solicitado existe no catálogo e se o banco
      correspondente está efetivamente instalado.
+   - Antes de iniciar o Nextflow, o wrapper consulta o catálogo local do snpEff
+     e verifica a presença do banco no overlay. Se o código genômico estiver
+     ausente do catálogo local ou ainda não estiver instalado, o banco é
+     preparado no overlay antes da execução.
    - Mensagens de erro foram ampliadas para orientar o usuário quando o banco
      não está pronto.
 
@@ -298,6 +302,19 @@ As principais alterações são:
   wrapper;
 - funções auxiliares para executar comandos, criar overlays e remover artefatos;
 - execução do script de personalização do snpEff com argumentos estruturados;
+- carregamento dos parâmetros da execução em estrutura reutilizável antes da
+  montagem da linha de comando do Nextflow;
+- identificação automática do código genômico que precisa de banco snpEff
+  quando `runSnpEff` está habilitado:
+  - para `virus=sars-cov2`, usa `NC_045512.2`;
+  - para outros vírus, usa `refGenomeCode`;
+- consulta ao catálogo local `snpEff_DB.catalog` para verificar se o código
+  genômico já está registrado;
+- verificação, via `apptainer exec` com overlay somente leitura, se o diretório
+  do banco existe dentro dos caminhos conhecidos do snpEff na imagem;
+- chamada automática de `add_entries_to_DB` antes da execução da pipeline quando
+  o código está ausente do catálogo local ou o banco ainda não está instalado no
+  overlay;
 - limpeza de imagens, overlays e catálogo por arquitetura;
 - suporte às opções de limpeza e staging na construção dos contêineres;
 - atualização do Pangolin dentro de overlay persistente;
@@ -317,6 +334,9 @@ As principais alterações são:
   - `--clean`, para remover artefatos antes da reconstrução;
   - `--staging-dir`, para escolher o local usado pelo Apptainer.
 - As opções são encaminhadas para a implementação no wrapper.
+- O comando `viralflow run` passa a receber `--arch`, com valores `amd64` ou
+  `arm64`, para informar a arquitetura usada na preparação automática do banco
+  snpEff antes da execução.
 
 ### Integração e arquivos auxiliares
 
@@ -380,9 +400,16 @@ Não foram considerados na análise funcional:
 6. Confirmar se o banco incluído diretamente na imagem arm64 também deve ser
    incorporado à imagem amd64, ou se ambos devem depender exclusivamente do
    overlay.
-7. Adicionar testes automatizados específicos para:
+7. Validar se a preparação automática do banco snpEff antes da execução deve
+   fazer download/alteração de overlay implicitamente ou exigir confirmação
+   explícita do usuário em ambientes de produção.
+8. Revisar a regra de correspondência do catálogo do snpEff, que usa busca do
+   `genome_code` dentro do campo de código, para confirmar se não haverá
+   correspondências ambíguas em catálogos maiores.
+9. Adicionar testes automatizados específicos para:
    - construção e limpeza de contêineres;
    - criação e uso dos overlays;
    - validação do banco do snpEff;
+   - preparação automática do banco snpEff antes de `viralflow run`;
    - geração dos quatro gráficos SVG;
    - seleção da versão estável do Pangolin.
