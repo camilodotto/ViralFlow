@@ -189,6 +189,19 @@ class RunVfnextTests(unittest.TestCase):
         ):
             self.assertIn(option, result.output)
 
+    @patch("wrapper.cli._run_vfnext")
+    def test_cli_defaults_match_nextflow_boolean_defaults(self, run_mock):
+        with TemporaryDirectory() as input_directory:
+            result = CliRunner().invoke(
+                cli_module.cli,
+                ["run", "--in-dir", input_directory],
+            )
+
+        self.assertEqual(result.exit_code, 0, result.output)
+        cli_params = run_mock.call_args.args[3]
+        self.assertEqual(cli_params["runSnpEff"], "true")
+        self.assertEqual(cli_params["writeMappedReads"], "true")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -112,9 +112,9 @@ def add_entry_to_snpeff(org_name, genome_code, arch):
               show_default=True, help="Output directory")
 @click.option("--primers-bed", type=click.Path(), default=None,
               help="BED file with primer positions")
-@click.option("--run-snpeff", is_flag=True, default=False,
+@click.option("--run-snpeff", is_flag=True, default=True,
               show_default=True, help="Run SnpEff annotation")
-@click.option("--write-mapped-reads", is_flag=True, default=False,
+@click.option("--write-mapped-reads", is_flag=True, default=True,
               show_default=True, help="Write mapped/unmapped reads")
 @click.option("--min-len", type=int, default=75,
               show_default=True, help="Minimum read length")
