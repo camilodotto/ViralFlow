@@ -31,6 +31,7 @@ nextflow_workflow {
                 "mode\ttool\tversion\tcontainer\texit_status\traw_output"
             assert versionRows[1].contains("\tbcftools\t")
             assert versionRows[1].contains("bcftools 1.21")
+            assert versionRows[1].split("\t")[4] == "0"
 
             def containerRows = path(workflow.out.containers.get(0)).readLines()
             assert containerRows[0] ==
@@ -71,6 +72,40 @@ nextflow_workflow {
             assert workflow.failed
             assert workflow.errorReport.contains(
                 "Configured SIF file does not exist"
+            )
+        }
+    }
+
+    test("Should reject a version command that fails with output") {
+        workflow "FAILED_VERSION_COMMAND_FIXTURE"
+
+        then {
+            assert workflow.failed
+            assert workflow.errorReport.contains(
+                "Unable to determine failing_tool version (exit status 7)"
+            )
+            assert workflow.errorReport.contains("failing-tool-1.2.3")
+        }
+    }
+
+    test("Should reject a missing version command") {
+        workflow "MISSING_TOOL_VERSION_FIXTURE"
+
+        then {
+            assert workflow.failed
+            assert workflow.errorReport.contains(
+                "Unable to determine missing_tool version (exit status 127)"
+            )
+        }
+    }
+
+    test("Should reject an empty successful version response") {
+        workflow "EMPTY_VERSION_OUTPUT_FIXTURE"
+
+        then {
+            assert workflow.failed
+            assert workflow.errorReport.contains(
+                "Unable to determine empty_tool version: empty output"
             )
         }
     }

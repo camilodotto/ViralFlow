@@ -39,8 +39,16 @@ process capture_tool_version {
     set -e
 
     cleaned=\$(printf '%s' "\${raw}" | tr '\\t\\r\\n' '   ' | sed 's/  */ /g; s/^ //; s/ \$//')
+    if [[ "\${status}" -ne 0 ]]; then
+        echo "Unable to determine ${tool_name} version (exit status \${status})" >&2
+        if [[ -n "\${cleaned}" ]]; then
+            printf 'Command output: %s\\n' "\${cleaned}" >&2
+        fi
+        exit "\${status}"
+    fi
+
     if [[ -z "\${cleaned}" ]]; then
-        echo "Unable to determine ${tool_name} version" >&2
+        echo "Unable to determine ${tool_name} version: empty output" >&2
         exit 1
     fi
 

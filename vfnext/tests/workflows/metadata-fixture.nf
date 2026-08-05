@@ -3,6 +3,9 @@ nextflow.enable.dsl = 2
 include {
     METADATA
     capture_container_metadata as capture_missing_container
+    capture_tool_version as capture_failed_tool_version
+    capture_tool_version as capture_missing_tool_version
+    capture_tool_version as capture_empty_tool_version
 } from '../../modules/metadata.nf'
 
 workflow METADATA_FIXTURE {
@@ -71,6 +74,51 @@ workflow MISSING_CONTAINER_FIXTURE {
         )
 
         capture_missing_container(missing_container_ch)
+}
+
+workflow FAILED_VERSION_COMMAND_FIXTURE {
+    main:
+        containerPath = file("${projectDir}/containers/baseContainer.sif")
+        tool_specs = channel.of(
+            tuple(
+                "TEST",
+                "failing_tool",
+                "printf failing-tool-1.2.3; exit 7",
+                containerPath.toString()
+            )
+        )
+
+        capture_failed_tool_version(tool_specs)
+}
+
+workflow MISSING_TOOL_VERSION_FIXTURE {
+    main:
+        containerPath = file("${projectDir}/containers/baseContainer.sif")
+        tool_specs = channel.of(
+            tuple(
+                "TEST",
+                "missing_tool",
+                "viralflow_tool_that_does_not_exist --version",
+                containerPath.toString()
+            )
+        )
+
+        capture_missing_tool_version(tool_specs)
+}
+
+workflow EMPTY_VERSION_OUTPUT_FIXTURE {
+    main:
+        containerPath = file("${projectDir}/containers/baseContainer.sif")
+        tool_specs = channel.of(
+            tuple(
+                "TEST",
+                "empty_tool",
+                "true",
+                containerPath.toString()
+            )
+        )
+
+        capture_empty_tool_version(tool_specs)
 }
 
 workflow CLASSIFY_LOCAL_CONTAINERS_FIXTURE {

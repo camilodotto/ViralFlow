@@ -136,7 +136,12 @@ class MetadataHelper {
         def projectDir = Path.of(workflow.projectDir.toString()).resolve("containers")
         def specs = [
             tool("ILLUMINA", "fastp", "fastp --version", projectDir.resolve("fastp:1.0.1.sif")),
-            tool("ILLUMINA", "bwa", "bwa 2>&1 | head -n 3", projectDir.resolve("generate_consensus:2.0.0.sif")),
+            tool(
+                "ILLUMINA",
+                "bwa",
+                "command -v bwa >/dev/null && { bwa 2>&1 | head -n 3 || true; }",
+                projectDir.resolve("generate_consensus:2.0.0.sif")
+            ),
             tool("ILLUMINA", "samtools", "samtools --version | head -n 1", projectDir.resolve("generate_consensus:2.0.0.sif")),
             tool("ILLUMINA", "ivar", "ivar version", projectDir.resolve("generate_consensus:2.0.0.sif")),
             tool("ILLUMINA", "mafft", "mafft --version", projectDir.resolve("mafft:7.505_2.sif"))
