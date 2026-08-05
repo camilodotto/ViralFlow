@@ -146,7 +146,8 @@ def add_entry_to_snpeff(org_name, genome_code, arch):
               show_default=True, help="Enable deduplication")
 @click.option("--ndedup", type=int, default=3,
               show_default=True, help="Number of allowed duplicates")
-def run(params_file, profile, mode, virus, in_dir, out_dir, primers_bed, run_snpeff,
+@click.pass_context
+def run(ctx, params_file, profile, mode, virus, in_dir, out_dir, primers_bed, run_snpeff,
         write_mapped_reads, min_len, depth, min_dp_intrahost, trim_len,
         ref_genome_code, reference_gff, reference_genome, nextflow_sim_calls,
         fastp_threads, bwa_threads, mafft_threads, mapping_quality,
@@ -190,8 +191,13 @@ def run(params_file, profile, mode, virus, in_dir, out_dir, primers_bed, run_snp
         if isinstance(v, bool):
             cli_params[k] = str(v).lower()
 
+    mode_is_explicit = (
+        ctx.get_parameter_source("mode") == click.core.ParameterSource.COMMANDLINE
+    )
+    mode_override = mode if mode_is_explicit or not params_file else None
+
     click.echo(f"ViralFlow v{__version__}")
-    _run_vfnext(VF_ROOT_PATH, params_file, mode, cli_params, profile)
+    _run_vfnext(VF_ROOT_PATH, params_file, mode_override, cli_params, profile)
 
 # =============================================================================
 #  Concat fastq commands

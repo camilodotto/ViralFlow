@@ -41,9 +41,11 @@ def build_containers(root_path, arch: str):
     
 
 # input args file load
-def parse_params(in_flpath):
+def parse_params(in_flpath, overrides=None):
     """
     load text file containing viralflow arguments
+
+    Explicit overrides replace values loaded from the file.
     """
     valid_args = [
         "mode",
@@ -110,6 +112,10 @@ def parse_params(in_flpath):
             if len(vls) > 1:
                 dct[key] = vls
             continue
+    in_file.close()
+
+    if overrides:
+        dct.update({key: value for key, value in overrides.items() if value is not None})
     # get arguments for nextflow
     
     args_str = ""
@@ -138,8 +144,10 @@ def run_vfnext(root_path, params_fl, mode, cli_params=None, profile=None):
     path_params = ["inDir", "outDir", "referenceGFF", "referenceGenome", "primersBED"]
 
     if params_fl:
-        # Params file takes full precedence — ignore CLI defaults
-        args_str = parse_params(params_fl)
+        # File values take precedence over CLI defaults. Explicit CLI values override them.
+        mode_override = {"mode": mode} if mode is not None else None
+        args_str = parse_params(params_fl, overrides=mode_override)
+        mode_str = ""
     else:
         # No file provided — use CLI params
         if cli_params:
@@ -149,12 +157,13 @@ def run_vfnext(root_path, params_fl, mode, cli_params=None, profile=None):
             args_str = " ".join(f"--{k} {v}" for k, v in cli_params.items())
         else:
             raise ValueError("No parameters provided. Use --params-file or individual CLI options.")
+        mode_str = f" --mode {mode}" if mode is not None else ""
 
     if "-resume" not in args_str:
         args_str += " -resume"
 
     profile_str = f" -profile {profile}" if profile else ""
-    run_nxtfl_cmd = f"NXF_VER={NEXTFLOW_VERSION} nextflow run {root_path}/vfnext/main.nf {args_str} --mode {mode}{profile_str}"
+    run_nxtfl_cmd = f"NXF_VER={NEXTFLOW_VERSION} nextflow run {root_path}/vfnext/main.nf {args_str}{mode_str}{profile_str}"
     print(run_nxtfl_cmd)
     os.system(run_nxtfl_cmd)
 
