@@ -146,12 +146,25 @@ def add_entry_to_snpeff(org_name, genome_code, arch):
               show_default=True, help="Enable deduplication")
 @click.option("--ndedup", type=int, default=3,
               show_default=True, help="Number of allowed duplicates")
+@click.option("--np-min-depth", type=int, default=None,
+              help="Override the Nanopore minimum consensus depth")
+@click.option("--af-threshold", type=float, default=None,
+              help="Override the Nanopore allele-frequency threshold")
+@click.option("--clair3-qual", type=float, default=None,
+              help="Override the Clair3 quality threshold")
+@click.option("--clair3-model", type=str, default=None,
+              help="Override the Clair3 model name")
+@click.option("--clair3-chunk-size", type=int, default=None,
+              help="Override the Clair3 chunk size")
+@click.option("--base-container", type=click.Path(), default=None,
+              help="Override the Nanopore base container path")
 @click.pass_context
 def run(ctx, params_file, profile, mode, virus, in_dir, out_dir, primers_bed, run_snpeff,
         write_mapped_reads, min_len, depth, min_dp_intrahost, trim_len,
         ref_genome_code, reference_gff, reference_genome, nextflow_sim_calls,
         fastp_threads, bwa_threads, mafft_threads, mapping_quality,
-        base_quality, dedup, ndedup):
+        base_quality, dedup, ndedup, np_min_depth, af_threshold, clair3_qual,
+        clair3_model, clair3_chunk_size, base_container):
     """Run the ViralFlow pipeline.
 
     All parameters have sensible defaults from nextflow.config.
@@ -179,8 +192,38 @@ def run(ctx, params_file, profile, mode, virus, in_dir, out_dir, primers_bed, ru
         "base_quality": base_quality,
         "dedup": dedup,
         "ndedup": ndedup,
+        "np_min_depth": np_min_depth,
+        "af_threshold": af_threshold,
+        "clair3_qual": clair3_qual,
+        "clair3_model": clair3_model,
+        "clair3_chunk_size": clair3_chunk_size,
+        "base_container": base_container,
     }
-    cli_params = {k: v for k, v in cli_to_nf.items() if v is not None}
+
+    click_param_names = {
+        "inDir": "in_dir",
+        "outDir": "out_dir",
+        "primersBED": "primers_bed",
+        "runSnpEff": "run_snpeff",
+        "writeMappedReads": "write_mapped_reads",
+        "minLen": "min_len",
+        "minDpIntrahost": "min_dp_intrahost",
+        "trimLen": "trim_len",
+        "refGenomeCode": "ref_genome_code",
+        "referenceGFF": "reference_gff",
+        "referenceGenome": "reference_genome",
+        "nextflowSimCalls": "nextflow_sim_calls",
+    }
+    if params_file:
+        cli_params = {
+            key: value
+            for key, value in cli_to_nf.items()
+            if value is not None
+            and ctx.get_parameter_source(click_param_names.get(key, key))
+            == click.core.ParameterSource.COMMANDLINE
+        }
+    else:
+        cli_params = {key: value for key, value in cli_to_nf.items() if value is not None}
 
     # Validate paths only when no params file is provided
     if not params_file:

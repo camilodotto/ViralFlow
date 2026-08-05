@@ -71,9 +71,18 @@ def parse_params(in_flpath, overrides=None):
         "mapping_quality",
         "base_quality",
         "dedup",
-        "ndedup"
+        "ndedup",
+        "np_min_depth",
+        "af_threshold",
+        "clair3_qual",
+        "clair3_model",
+        "clair3_chunk_size",
+        "base_container"
     ]
-    path_params = ["inDir", "outDir", "referenceGFF", "referenceGenome", "primersBED"]
+    path_params = [
+        "inDir", "outDir", "referenceGFF", "referenceGenome", "primersBED",
+        "base_container"
+    ]
     in_file = open(in_flpath, "r")
     dct = {}
     for l in in_file:
@@ -141,19 +150,26 @@ def run_vfnext(root_path, params_fl, mode, cli_params=None, profile=None):
     If params_fl is provided, file parameters are the rule (CLI defaults are ignored).
     If no params_fl, CLI parameters are used.
     """
-    path_params = ["inDir", "outDir", "referenceGFF", "referenceGenome", "primersBED"]
+    path_params = [
+        "inDir", "outDir", "referenceGFF", "referenceGenome", "primersBED",
+        "base_container"
+    ]
+
+    if cli_params:
+        for key in path_params:
+            if key in cli_params:
+                cli_params[key] = os.path.abspath(str(cli_params[key]))
 
     if params_fl:
         # File values take precedence over CLI defaults. Explicit CLI values override them.
-        mode_override = {"mode": mode} if mode is not None else None
-        args_str = parse_params(params_fl, overrides=mode_override)
+        overrides = dict(cli_params or {})
+        if mode is not None:
+            overrides["mode"] = mode
+        args_str = parse_params(params_fl, overrides=overrides)
         mode_str = ""
     else:
         # No file provided — use CLI params
         if cli_params:
-            for k in path_params:
-                if k in cli_params:
-                    cli_params[k] = os.path.abspath(str(cli_params[k]))
             args_str = " ".join(f"--{k} {v}" for k, v in cli_params.items())
         else:
             raise ValueError("No parameters provided. Use --params-file or individual CLI options.")

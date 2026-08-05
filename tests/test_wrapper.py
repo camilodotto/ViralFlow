@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 from click.testing import CliRunner
 
-from wrapper import NEXTFLOW_VERSION, run_vfnext
+from wrapper import NEXTFLOW_VERSION, parse_params, run_vfnext
 
 with patch("importlib.metadata.version", return_value="1.5.0"):
     cli_module = import_module("wrapper.cli")
@@ -108,6 +108,86 @@ class RunVfnextTests(unittest.TestCase):
 
         self.assertEqual(result.exit_code, 0, result.output)
         self.assertEqual(run_mock.call_args.args[2], "ILLUMINA")
+
+    def test_parse_params_accepts_existing_nanopore_parameters(self):
+        with TemporaryDirectory() as temporary_directory:
+            base_container = Path(temporary_directory) / "baseContainer.sif"
+            params_file = Path(temporary_directory) / "params.txt"
+            params_file.write_text(
+                "np_min_depth 30\n"
+                "af_threshold 0.60\n"
+                "clair3_qual 12.5\n"
+                "clair3_model r1041_e82_400bps_sup_v500\n"
+                "clair3_chunk_size 20000\n"
+                f"base_container {base_container}\n"
+            )
+
+            arguments = parse_params(str(params_file))
+
+        self.assertIn("--np_min_depth 30", arguments)
+        self.assertIn("--af_threshold 0.60", arguments)
+        self.assertIn("--clair3_qual 12.5", arguments)
+        self.assertIn("--clair3_model r1041_e82_400bps_sup_v500", arguments)
+        self.assertIn("--clair3_chunk_size 20000", arguments)
+        self.assertIn(f"--base_container {base_container}", arguments)
+
+    @patch("wrapper.os.system")
+    def test_constructs_command_with_existing_nanopore_parameters(self, system_mock):
+        run_vfnext(
+            "/opt/ViralFlow",
+            params_fl=None,
+            mode="NANOPORE",
+            cli_params={
+                "np_min_depth": 30,
+                "af_threshold": 0.6,
+                "clair3_qual": 12.5,
+                "clair3_model": "r1041_e82_400bps_sup_v500",
+                "clair3_chunk_size": 20000,
+                "base_container": "/containers/baseContainer.sif",
+            },
+        )
+
+        command = system_mock.call_args.args[0]
+        self.assertIn("--np_min_depth 30", command)
+        self.assertIn("--af_threshold 0.6", command)
+        self.assertIn("--clair3_qual 12.5", command)
+        self.assertIn("--clair3_model r1041_e82_400bps_sup_v500", command)
+        self.assertIn("--clair3_chunk_size 20000", command)
+        self.assertIn("--base_container /containers/baseContainer.sif", command)
+
+    @patch("wrapper.cli._run_vfnext")
+    def test_explicit_nanopore_cli_option_overrides_params_file(self, run_mock):
+        with TemporaryDirectory() as temporary_directory:
+            params_file = Path(temporary_directory) / "params.txt"
+            params_file.write_text("np_min_depth 20\n")
+
+            result = CliRunner().invoke(
+                cli_module.cli,
+                [
+                    "run",
+                    "--params-file",
+                    str(params_file),
+                    "--np-min-depth",
+                    "30",
+                ],
+            )
+
+        self.assertEqual(result.exit_code, 0, result.output)
+        self.assertEqual(run_mock.call_args.args[3], {"np_min_depth": 30})
+
+    def test_run_help_lists_existing_nanopore_parameters(self):
+        result = CliRunner().invoke(cli_module.cli, ["run", "--help"])
+
+        self.assertEqual(result.exit_code, 0, result.output)
+        for option in (
+            "--np-min-depth",
+            "--af-threshold",
+            "--clair3-qual",
+            "--clair3-model",
+            "--clair3-chunk-size",
+            "--base-container",
+        ):
+            self.assertIn(option, result.output)
 
 
 if __name__ == "__main__":

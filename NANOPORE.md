@@ -40,6 +40,26 @@ nextflow run /../ViralFlow/vfnext/main.nf \
 
 to run it using apptainer, just add `-profile apptainer` to your nextflow command.
 
+The same existing Nanopore parameters can be passed through the ViralFlow
+wrapper:
+
+```bash
+viralflow run --mode NANOPORE \
+  --in-dir /path/to/np_input_dir/ \
+  --reference-genome /path/to/reference.fna \
+  --np-min-depth 20 \
+  --af-threshold 0.51 \
+  --clair3-qual 10 \
+  --clair3-model r941_prom_sup_g5014 \
+  --clair3-chunk-size 10000 \
+  --base-container /path/to/baseContainer.sif
+```
+
+In a params file, use the original Nextflow names: `np_min_depth`,
+`af_threshold`, `clair3_qual`, `clair3_model`, `clair3_chunk_size`, and
+`base_container`. Omitting these options leaves the defaults from
+`nextflow.config` unchanged.
+
 ## Current threshold behavior
 
 The current threshold logic is as follows:
