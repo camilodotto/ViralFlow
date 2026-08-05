@@ -5,6 +5,9 @@ import java.nio.file.Path
 
 class MetadataHelper {
 
+    private static final String CLAIR3_CONTAINER =
+        "docker://hkubal/clair3:v1.2.0"
+
     static Path metadataDir(def params) {
         return Path.of(params.outDir.toString()).toAbsolutePath().normalize()
             .resolve("RUN_METADATA")
@@ -92,7 +95,7 @@ class MetadataHelper {
 
         if (params.mode == "NANOPORE") {
             specs << localContainerSpec("nanopore_base", params.base_container)
-            specs << remoteContainer("clair3", "docker://hkubal/clair3:v1.2.0")
+            specs << remoteContainer("clair3", CLAIR3_CONTAINER)
         } else if (params.mode == "ILLUMINA") {
             def projectDir = Path.of(workflow.projectDir.toString())
             specs.addAll([
@@ -126,7 +129,7 @@ class MetadataHelper {
                 tool("NANOPORE", "minimap2", "minimap2 --version", params.base_container),
                 tool("NANOPORE", "samtools", "samtools --version | head -n 1", params.base_container),
                 tool("NANOPORE", "bcftools", "bcftools --version | head -n 1", params.base_container),
-                tool("NANOPORE", "clair3", "run_clair3.sh -v ", "docker://hkubal/clair3:v1.2.0")
+                tool("NANOPORE", "clair3", "run_clair3.sh -v ", CLAIR3_CONTAINER)
             ]
         }
 

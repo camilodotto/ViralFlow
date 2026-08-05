@@ -68,7 +68,8 @@ nextflow_workflow {
             assert sha256(path("${projectDir}/${baseContainer[1]}")) ==
                 baseContainer[2]
             def clair3Container = containerRows.find { it[0] == "clair3" }
-            assert clair3Container[1].endsWith(clair3Container[2])
+            assert clair3Container[1] == "docker://hkubal/clair3:v1.2.0"
+            assert clair3Container[2] == "NA"
 
             def parseVariants = { lines ->
                 lines.findAll { !it.startsWith("#") }.collect { line ->
