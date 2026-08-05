@@ -2,6 +2,9 @@ import os
 import glob
 
 
+NEXTFLOW_VERSION = "24.10.3"
+
+
 def add_entries_to_DB(root_path, org_name, refseq_code, arch):
     """
     add entries provided to snpeff database
@@ -150,9 +153,8 @@ def run_vfnext(root_path, params_fl, mode, cli_params=None, profile=None):
     if "-resume" not in args_str:
         args_str += " -resume"
 
-    nxtflw_ver="22.04.0"
     profile_str = f" -profile {profile}" if profile else ""
-    run_nxtfl_cmd = f"NXF_VER={nxtflw_ver} nextflow run {root_path}/vfnext/main.nf {args_str} --mode {mode}{profile_str}"
+    run_nxtfl_cmd = f"NXF_VER={NEXTFLOW_VERSION} nextflow run {root_path}/vfnext/main.nf {args_str} --mode {mode}{profile_str}"
     print(run_nxtfl_cmd)
     os.system(run_nxtfl_cmd)
 
