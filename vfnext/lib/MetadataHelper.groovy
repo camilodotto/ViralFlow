@@ -7,6 +7,8 @@ class MetadataHelper {
 
     private static final String CLAIR3_CONTAINER =
         "docker://hkubal/clair3:v1.2.0"
+    private static final String INTRAHOST_SCRIPT_CONTAINER =
+        "community.wave.seqera.io/library/pip_bio_numpy_pandas:76453d2622855f06"
 
     static Path metadataDir(def params) {
         return Path.of(params.outDir.toString()).toAbsolutePath().normalize()
@@ -106,6 +108,7 @@ class MetadataHelper {
                 localContainerSpec("mafft", projectDir.resolve("containers/mafft:7.505_2.sif")),
                 localContainerSpec("picard", projectDir.resolve("containers/picard:2.27.2_2.sif")),
                 localContainerSpec("intrahost_analysis", projectDir.resolve("containers/intrahost_analysis:1.1.0.sif")),
+                remoteContainer("intrahost_script", INTRAHOST_SCRIPT_CONTAINER),
                 localContainerSpec("generate_plots", projectDir.resolve("containers/generate_plots:2.0.0.sif")),
                 localContainerSpec("compiled_outputs", projectDir.resolve("containers/compiled_outputs:1.1.0.sif"))
             ])

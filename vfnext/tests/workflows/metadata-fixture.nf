@@ -139,6 +139,16 @@ workflow CLASSIFY_LOCAL_CONTAINERS_FIXTURE {
         specs_ch
 }
 
+workflow CONTAINER_SPECS_FIXTURE {
+    main:
+        specs_ch = channel.value(
+            MetadataHelper.containerSpecs(params, workflow)
+        )
+
+    emit:
+        specs_ch
+}
+
 workflow NORMALIZE_METADATA_FIXTURE {
     main:
         normalized = MetadataHelper.normalizeMap([

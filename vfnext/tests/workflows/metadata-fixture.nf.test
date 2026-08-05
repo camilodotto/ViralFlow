@@ -65,6 +65,52 @@ nextflow_workflow {
         }
     }
 
+    test("Should inventory distinct intrahost containers for Illumina") {
+        workflow "CONTAINER_SPECS_FIXTURE"
+
+        when {
+            params {
+                mode = "ILLUMINA"
+                virus = "custom"
+                runSnpEff = false
+            }
+        }
+
+        then {
+            assert workflow.success
+            def specs = workflow.out.specs_ch.get(0)
+            def specsByName = specs.collectEntries { [(it.name): it] }
+
+            assert specsByName.intrahost_analysis.kind == "local_sif"
+            assert specsByName.intrahost_analysis.identity.endsWith(
+                "/containers/intrahost_analysis:1.1.0.sif"
+            )
+            assert specsByName.intrahost_script == [
+                name: "intrahost_script",
+                kind: "remote_uri",
+                identity: "community.wave.seqera.io/library/pip_bio_numpy_pandas:76453d2622855f06"
+            ]
+        }
+    }
+
+    test("Should not inventory Illumina intrahost containers for Nanopore") {
+        workflow "CONTAINER_SPECS_FIXTURE"
+
+        when {
+            params {
+                mode = "NANOPORE"
+                base_container = "${projectDir}/containers/baseContainer.sif"
+            }
+        }
+
+        then {
+            assert workflow.success
+            def names = workflow.out.specs_ch.get(0)*.name
+            assert !names.contains("intrahost_analysis")
+            assert !names.contains("intrahost_script")
+        }
+    }
+
     test("Should reject a missing local container") {
         workflow "MISSING_CONTAINER_FIXTURE"
 
