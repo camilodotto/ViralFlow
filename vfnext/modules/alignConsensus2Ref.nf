@@ -1,11 +1,11 @@
 process alignConsensus2Ref {
     tag "${meta.id}"
-    publishDir "${params.outDir}/${meta.id}_results/", mode: "copy"
+    publishDir { "${params.outDir}/${meta.id}_results/" }, mode: "copy"
     label "multithread"
 
     input:
     tuple val(meta), path(consensus_fa), path(ivar_txt), path(mut_tsv), path(vcf_file), path(vcf_index)
-    path(ref_fa)
+    path(refFa)
     //temporary solution, we only need the consensus_fa. handle channels better
     output:
     tuple val(meta), path("${meta.id}.depth${params.depth}.fa.algn")
@@ -14,7 +14,7 @@ process alignConsensus2Ref {
     """
     mafft --keeplength --add ${meta.id}.depth${params.depth}.fa \
                        --thread ${params.mafft_threads} \
-                       ${ref_fa} \
+                       ${refFa} \
     > ${meta.id}.depth${params.depth}.fa.algn
     """
 }

@@ -19,16 +19,16 @@ class RunVfnextTests(unittest.TestCase):
         params_file = Path(temporary_directory.name) / "params.txt"
         params_file.write_text(contents)
 
-        with patch("wrapper.os.system") as system_mock:
+        with patch("wrapper.subprocess.run") as system_mock:
             run_vfnext(
                 "/opt/ViralFlow",
                 params_fl=str(params_file),
                 mode=mode,
             )
 
-        return system_mock.call_args.args[0]
+        return " ".join(system_mock.call_args.args[0])
 
-    @patch("wrapper.os.system")
+    @patch("wrapper.subprocess.run")
     def test_uses_pipeline_compatible_nextflow_version(self, system_mock):
         run_vfnext(
             "/opt/ViralFlow",
@@ -38,11 +38,85 @@ class RunVfnextTests(unittest.TestCase):
             profile="apptainer",
         )
 
-        self.assertEqual(NEXTFLOW_VERSION, "24.10.3")
-        system_mock.assert_called_once_with(
-            "NXF_VER=24.10.3 nextflow run /opt/ViralFlow/vfnext/main.nf "
-            "--virus sars-cov2 -resume --mode NANOPORE -profile apptainer"
+        self.assertEqual(NEXTFLOW_VERSION, "26.04.6")
+        command = system_mock.call_args.args[0]
+        self.assertEqual(
+            command,
+            [
+                "nextflow",
+                "run",
+                "/opt/ViralFlow/vfnext/main.nf",
+                "--virus",
+                "sars-cov2",
+                "-resume",
+                "--mode",
+                "NANOPORE",
+                "-profile",
+                "apptainer",
+            ],
         )
+        self.assertEqual(
+            system_mock.call_args.kwargs["env"]["NXF_VER"], NEXTFLOW_VERSION
+        )
+        self.assertTrue(system_mock.call_args.kwargs["check"])
+
+    @patch("wrapper.subprocess.run")
+    def test_cli_overrides_file_without_replacing_unset_values(self, run_mock):
+        with TemporaryDirectory() as directory:
+            params_file = Path(directory) / "params.txt"
+            params_file.write_text(
+                "mode NANOPORE\nnp_min_depth 20\n"
+                "af_threshold 0.7\nrunSnpEff false\nwriteMappedReads false\n"
+            )
+            result = CliRunner().invoke(
+                cli_module.cli,
+                ["run", "--params-file", str(params_file), "--np-min-depth", "30"],
+            )
+
+        self.assertEqual(result.exit_code, 0, result.output)
+        command = run_mock.call_args.args[0]
+        for name, value in {
+            "mode": "NANOPORE",
+            "np_min_depth": "30",
+            "af_threshold": "0.7",
+            "runSnpEff": "false",
+            "writeMappedReads": "false",
+        }.items():
+            self.assertEqual(command.count(f"--{name}"), 1)
+            self.assertEqual(command[command.index(f"--{name}") + 1], value)
+
+    @patch("wrapper.subprocess.run")
+    def test_cli_mode_override_is_validated_after_merging_parameters(self, run_mock):
+        with TemporaryDirectory() as directory:
+            params_file = Path(directory) / "params.txt"
+            params_file.write_text("mode ILLUMINA\n")
+            result = CliRunner().invoke(
+                cli_module.cli,
+                [
+                    "run",
+                    "--params-file",
+                    str(params_file),
+                    "--mode",
+                    "NANOPORE",
+                    "--np-min-depth",
+                    "30",
+                ],
+            )
+
+        self.assertEqual(result.exit_code, 0, result.output)
+        command = run_mock.call_args.args[0]
+        self.assertEqual(command.count("--mode"), 1)
+        self.assertEqual(command[command.index("--mode") + 1], "NANOPORE")
+
+    def test_file_container_path_with_spaces_remains_a_single_argument(self):
+        with TemporaryDirectory() as directory:
+            container = Path(directory) / "base image.sif"
+            container.touch()
+            params_file = Path(directory) / "params.txt"
+            params_file.write_text(f"mode NANOPORE\nbase_container {container}\n")
+            command = parse_params(params_file)
+
+        self.assertEqual(command[command.index("--base_container") + 1], str(container))
 
     def test_uses_pipeline_default_when_no_mode_is_specified(self):
         command = self.run_with_params_file("virus sars-cov2\n", mode=None)
@@ -55,7 +129,7 @@ class RunVfnextTests(unittest.TestCase):
         self.assertIn("--mode NANOPORE", command)
         self.assertEqual(command.count("--mode"), 1)
 
-    @patch("wrapper.os.system")
+    @patch("wrapper.subprocess.run")
     def test_uses_mode_specified_explicitly_through_cli(self, system_mock):
         run_vfnext(
             "/opt/ViralFlow",
@@ -64,7 +138,7 @@ class RunVfnextTests(unittest.TestCase):
             cli_params={"virus": "sars-cov2"},
         )
 
-        command = system_mock.call_args.args[0]
+        command = " ".join(system_mock.call_args.args[0])
         self.assertIn("--mode NANOPORE", command)
         self.assertEqual(command.count("--mode"), 1)
 
@@ -114,6 +188,7 @@ class RunVfnextTests(unittest.TestCase):
             base_container = Path(temporary_directory) / "baseContainer.sif"
             params_file = Path(temporary_directory) / "params.txt"
             params_file.write_text(
+                "mode NANOPORE\n"
                 "np_min_depth 30\n"
                 "af_threshold 0.60\n"
                 "clair3_qual 12.5\n"
@@ -122,7 +197,7 @@ class RunVfnextTests(unittest.TestCase):
                 f"base_container {base_container}\n"
             )
 
-            arguments = parse_params(str(params_file))
+            arguments = " ".join(parse_params(str(params_file)))
 
         self.assertIn("--np_min_depth 30", arguments)
         self.assertIn("--af_threshold 0.60", arguments)
@@ -131,7 +206,7 @@ class RunVfnextTests(unittest.TestCase):
         self.assertIn("--clair3_chunk_size 20000", arguments)
         self.assertIn(f"--base_container {base_container}", arguments)
 
-    @patch("wrapper.os.system")
+    @patch("wrapper.subprocess.run")
     def test_constructs_command_with_existing_nanopore_parameters(self, system_mock):
         run_vfnext(
             "/opt/ViralFlow",
@@ -147,7 +222,7 @@ class RunVfnextTests(unittest.TestCase):
             },
         )
 
-        command = system_mock.call_args.args[0]
+        command = " ".join(system_mock.call_args.args[0])
         self.assertIn("--np_min_depth 30", command)
         self.assertIn("--af_threshold 0.6", command)
         self.assertIn("--clair3_qual 12.5", command)
@@ -159,7 +234,7 @@ class RunVfnextTests(unittest.TestCase):
     def test_explicit_nanopore_cli_option_overrides_params_file(self, run_mock):
         with TemporaryDirectory() as temporary_directory:
             params_file = Path(temporary_directory) / "params.txt"
-            params_file.write_text("np_min_depth 20\n")
+            params_file.write_text("mode NANOPORE\nnp_min_depth 20\n")
 
             result = CliRunner().invoke(
                 cli_module.cli,

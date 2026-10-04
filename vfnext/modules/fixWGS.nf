@@ -2,7 +2,7 @@ process fixWGS {
   tag "${meta.id}"
   label "singlethread"
   errorStrategy 'ignore'
-  publishDir "${params.outDir}/${meta.id}_results/", mode : "copy"
+  publishDir { "${params.outDir}/${meta.id}_results/" }, mode : "copy"
 
   input:
      tuple val(meta), path(wgs), path(metrics), path(consensus), path(ivar_txt), path(mut_tsv), path(vcf_file), path(vcf_index)
@@ -30,11 +30,11 @@ process fixWGS {
         total_N = sum([1 for i in seq if i == "N"])
         total_bases = len(seq)
         try:
-            assert(total_bases > 0)      
+            assert(total_bases > 0)
         except(AssertionError):
             print("WARN: No sequence at ${consensus_fa}")
             return 0
-        
+
         return (total_bases - total_N) / total_bases
      # ------------------------------------------------------------------------
      # compute coverage

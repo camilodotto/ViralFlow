@@ -1,6 +1,6 @@
-process run_nanopore_qc {
+process runNanoporeSummary {
     label "NP_basecontainer"
-    publishDir "${params.outDir}/${meta.id}_results/", mode: 'copy', overwrite: true
+    publishDir { "${params.outDir}/${meta.id}_results/" }, mode: 'copy', overwrite: true
     tag "${meta.id}"
 
     input:
@@ -18,13 +18,16 @@ process run_nanopore_qc {
         val(min_depth)
 
     output:
-        tuple val(meta), path("${meta.id}.nanopore_qc.tsv")
+        tuple val(meta), path("${meta.id}.nanopore_summary.tsv")
 
     script:
+    // Called by name: Nextflow puts bin/ on the task's PATH wherever the task
+    // runs. ${projectDir}/bin names the launch host's copy, which a cloud
+    // executor's task never sees; Nextflow uploads bin/ there instead.
     """
     set -euo pipefail
 
-    python3 ${projectDir}/bin/nanopore_qc.py \
+    nanopore_summary.py \
         --raw-vcf ${raw_vcf} \
         --filtered-vcf ${filtered_vcf} \
         --consensus ${consensus} \
@@ -34,6 +37,6 @@ process run_nanopore_qc {
         --mapping-quality ${mapping_quality} \
         --af-threshold ${af_threshold} \
         --min-depth ${min_depth} \
-        --output ${meta.id}.nanopore_qc.tsv
+        --output ${meta.id}.nanopore_summary.tsv
     """
 }

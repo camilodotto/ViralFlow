@@ -1,7 +1,7 @@
 
 process runFastp{
   tag "${meta.id}"
-  publishDir "${params.outDir}/${meta.id}_results/", mode: "copy", pattern: "*.fastp.html"
+  publishDir { "${params.outDir}/${meta.id}_results/" }, mode: "copy", pattern: "*.fastp.html"
   label "multithread"
 
   input:
@@ -10,7 +10,7 @@ process runFastp{
   output:
     // tuple val(prfx), path('*.R{1,2}.fq.gz'), path("${prfx}.fastp.html")
     tuple val(meta), path('*.*.fq.gz'), path("${prfx}.fastp.html")
-    
+
   script:
       prfx = meta.id
       // if paired end, use R1 and R2, otherwise use SE

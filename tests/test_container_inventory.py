@@ -2,10 +2,7 @@ import unittest
 from pathlib import Path
 
 
-INTRAHOST_SCRIPT_CONTAINER = (
-    "community.wave.seqera.io/library/"
-    "pip_bio_numpy_pandas:76453d2622855f06"
-)
+INTRAHOST_SCRIPT_CONTAINER = "intrahost_analysis:1.1.0.sif"
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -15,14 +12,20 @@ class ContainerInventoryTests(unittest.TestCase):
             REPOSITORY_ROOT / "vfnext/configs/containers.config"
         ).read_text()
         metadata_helper = (
-            REPOSITORY_ROOT / "vfnext/lib/MetadataHelper.groovy"
+            REPOSITORY_ROOT / "vfnext/modules/metadata_helpers.nf"
         ).read_text()
 
         self.assertIn(INTRAHOST_SCRIPT_CONTAINER, runtime_config)
-        self.assertIn(INTRAHOST_SCRIPT_CONTAINER, metadata_helper)
+        # Both intrahost processes now share the declared local image.
         self.assertIn(
-            'remoteContainer("intrahost_script", INTRAHOST_SCRIPT_CONTAINER)',
+            "'intrahost_analysis'",
             metadata_helper,
+        )
+        self.assertIn("illuminaContainerSpec(params, name)", metadata_helper)
+        self.assertRegex(
+            runtime_config,
+            r"withName:\s*runIntraHostScript \{\s*container = \{ "
+            r"params.getOrDefault\('illumina_containers', \[:\]\).intrahost_analysis \}",
         )
 
 

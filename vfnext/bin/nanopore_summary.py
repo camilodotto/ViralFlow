@@ -1,7 +1,38 @@
 #!/usr/bin/env python3
+"""Summarise one sample's NANOPORE consensus run as a TSV of metrics.
+
+Descriptive only: nothing downstream reads this file, and its contents never
+affect whether the pipeline succeeds or what it filters.
+
+masked_bases and consensus_n_bases are not the same number
+----------------------------------------------------------
+They are equal whenever the reference contains no N, which makes them look
+interchangeable. They are not:
+
+- `masked_bases` counts reference positions this pipeline masked because
+  `samtools depth` reported `depth <= --min-depth`. It is a diagnostic for the
+  threshold you chose.
+- `consensus_n_bases` counts every N in the consensus, whatever put it there.
+  That includes the masked positions *and* any N the reference already carried.
+
+So `consensus_n_bases - masked_bases` is the N that did **not** come from your
+coverage threshold. On an N-free reference such as NC_045512.2 the difference is
+zero, which is why they agree in the truth fixture; on a reference carrying
+ambiguity codes they diverge by exactly that count.
+
+`callable_bases` and `callable_percent` are derived from `consensus_n_bases`,
+not from `masked_bases`, because a reference N is just as uncallable as a
+low-coverage one.
+
+Coordinate spaces differ too: `masked_bases` is counted over the reference,
+`consensus_n_bases` over the consensus, and indels make those two lengths
+differ. Note that `bcftools consensus` does not apply a variant that falls
+inside a masked region, so a deletion there leaves the consensus length
+unchanged.
+"""
 
 import argparse
-import gzip
+import fileinput
 import statistics
 
 
@@ -23,7 +54,13 @@ def parse_args():
 
 
 def open_text(path):
-    return gzip.open(path, "rt") if path.endswith(".gz") else open(path)
+    """Open a VCF as text whether or not it is gzipped.
+
+    Mode is "r", not "rt": hook_compressed passes the mode straight to
+    gzip.open, and "rt" there raises
+    "underlying read() should have returned a bytes-like object".
+    """
+    return fileinput.hook_compressed(path, "r")
 
 
 def count_fasta(path):

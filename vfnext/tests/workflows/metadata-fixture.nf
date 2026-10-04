@@ -2,16 +2,36 @@ nextflow.enable.dsl = 2
 
 include {
     METADATA
-    capture_container_metadata as capture_missing_container
-    capture_tool_version as capture_failed_tool_version
-    capture_tool_version as capture_missing_tool_version
-    capture_tool_version as capture_empty_tool_version
+    captureContainerMetadata
+    captureContainerMetadata as capture_missing_container
+    captureToolVersion as capture_failed_tool_version
+    captureToolVersion as capture_missing_tool_version
+    captureToolVersion as capture_empty_tool_version
 } from '../../modules/metadata.nf'
+include {
+    localContainerSpec
+    normalizeMetadata
+    referenceMetadataChannel
+    containerSpecChannel
+    toolSpecChannel
+} from '../../modules/metadata_helpers.nf'
+include { processInputs } from '../../workflows/step0-input-handling.nf'
+
+// The container engine the spec helpers classify for. Pinned by a test's params
+// rather than read from workflow.containerEngine, so a test asserts the same
+// thing under -profile docker in CI as under singularity elsewhere. main.nf
+// passes the real engine.
+def fixtureEngine() {
+    params.getOrDefault('engine', 'singularity')
+}
 
 workflow METADATA_FIXTURE {
     main:
         def inputFile = file("${projectDir}/tests/data/bcftools/ref.fa")
-        def containerPath = file("${projectDir}/containers/baseContainer.sif")
+        // Take the container from the parameter rather than hardcoding the SIF
+        // path, so this runs under whichever profile is active - the .sif under
+        // singularity, the image under -profile docker.
+        def containerPath = params.base_container
 
         checksum_inputs = channel.of(
             tuple(
@@ -50,6 +70,7 @@ workflow METADATA_FIXTURE {
             checksum_inputs,
             tool_specs,
             container_specs,
+            channel.of([["sample", 1, "single", inputFile.toString(), ""]]),
             params.metadataDir
         )
 
@@ -61,11 +82,11 @@ workflow METADATA_FIXTURE {
 
 workflow MISSING_CONTAINER_FIXTURE {
     main:
-        missing_spec = MetadataHelper.localContainerSpec(
+        missing_spec = localContainerSpec(
             "missing",
             file("${projectDir}/tests/data/metadata/missing.sif")
         )
-        missing_container_ch = channel.of(
+        missingContainerCh = channel.of(
             tuple(
                 missing_spec.name,
                 missing_spec.kind,
@@ -73,12 +94,12 @@ workflow MISSING_CONTAINER_FIXTURE {
             )
         )
 
-        capture_missing_container(missing_container_ch)
+        capture_missing_container(missingContainerCh)
 }
 
 workflow FAILED_VERSION_COMMAND_FIXTURE {
     main:
-        containerPath = file("${projectDir}/containers/baseContainer.sif")
+        containerPath = params.base_container
         tool_specs = channel.of(
             tuple(
                 "TEST",
@@ -93,7 +114,7 @@ workflow FAILED_VERSION_COMMAND_FIXTURE {
 
 workflow MISSING_TOOL_VERSION_FIXTURE {
     main:
-        containerPath = file("${projectDir}/containers/baseContainer.sif")
+        containerPath = params.base_container
         tool_specs = channel.of(
             tuple(
                 "TEST",
@@ -108,7 +129,7 @@ workflow MISSING_TOOL_VERSION_FIXTURE {
 
 workflow EMPTY_VERSION_OUTPUT_FIXTURE {
     main:
-        containerPath = file("${projectDir}/containers/baseContainer.sif")
+        containerPath = params.base_container
         tool_specs = channel.of(
             tuple(
                 "TEST",
@@ -124,34 +145,24 @@ workflow EMPTY_VERSION_OUTPUT_FIXTURE {
 workflow CLASSIFY_LOCAL_CONTAINERS_FIXTURE {
     main:
         specs = [
-            MetadataHelper.localContainerSpec(
+            localContainerSpec(
                 "sandbox",
                 file("${projectDir}/tests/data/metadata/sandbox-container")
             ),
-            MetadataHelper.localContainerSpec(
+            localContainerSpec(
                 "sif",
                 file("${projectDir}/tests/data/bcftools/ref.fa")
             )
         ]
-        specs_ch = channel.value(specs)
+        specsCh = channel.value(specs)
 
     emit:
-        specs_ch
-}
-
-workflow CONTAINER_SPECS_FIXTURE {
-    main:
-        specs_ch = channel.value(
-            MetadataHelper.containerSpecs(params, workflow)
-        )
-
-    emit:
-        specs_ch
+        specsCh
 }
 
 workflow NORMALIZE_METADATA_FIXTURE {
     main:
-        normalized = MetadataHelper.normalizeMap([
+        normalized = normalizeMetadata([
             null_value: null,
             enabled: true,
             count: 3,
@@ -159,30 +170,71 @@ workflow NORMALIZE_METADATA_FIXTURE {
             values: ["a", 2],
             path: file("${projectDir}/tests/data/bcftools/ref.fa")
         ])
-        normalized_ch = channel.value(normalized)
+        normalizedCh = channel.value(normalized)
 
     emit:
-        normalized_ch
+        normalizedCh
 }
 
+// containerSpecs() and toolSpecs() build the tuples that captureContainerMetadata
+// and captureToolVersion consume by position. Neither builder was executed by any
+// test: main.nf reaches them only after processInputs(), and the one test that runs
+// main.nf aborts in validation first. A field reorder would therefore corrupt
+// container_manifest.tsv with every test still green.
+//
+// This drives the real builder into the real process, so the two stay in agreement.
+workflow CONTAINER_SPECS_FIXTURE {
+    main:
+        captureContainerMetadata(containerSpecChannel(params, fixtureEngine()))
+
+    emit:
+        rows = captureContainerMetadata.out
+}
+
+// The ILLUMINA branch of containerSpecs() cannot go through
+// captureContainerMetadata the way CONTAINER_SPECS_FIXTURE does: that process
+// checksums each local .sif, and the ILLUMINA images are pulled by
+// `viralflow build-containers` rather than living in the repository, so they are
+// absent wherever the suite runs. Emit the tuples instead - enough to pin which
+// containers the branch declares and how each is classified.
+workflow CONTAINER_SPECS_TUPLES_FIXTURE {
+    main:
+        containerSpecsCh = containerSpecChannel(params, fixtureEngine())
+
+    emit:
+        containerSpecsCh
+}
+
+// toolSpecs feeds captureToolVersion, which can only run inside each tool's own
+// container. Assert the tuple contract here; the execution path is covered by
+// METADATA_FIXTURE.
+workflow TOOL_SPECS_FIXTURE {
+    main:
+        toolSpecsCh = toolSpecChannel(params, workflow, fixtureEngine())
+
+    emit:
+        toolSpecsCh
+}
+
+// Drives the real processInputs outputs through the same helper main.nf uses,
+// so a regression in reference metadata handling fails here instead of hiding
+// behind a synthetic channel.
 workflow OPTIONAL_GFF_METADATA_FIXTURE {
     main:
-        ref_gff = channel.value(
-            file("${projectDir}/tests/data/bcftools/ref.fa")
+        processInputs()
+
+        fastaMetadataCh = referenceMetadataChannel(
+            "reference_fasta",
+            processInputs.out.refFa
         )
-        gff_metadata_ch = params.mode == "ILLUMINA"
-            ? ref_gff
-                .filter { referenceGff -> referenceGff != null }
-                .map { referenceGff ->
-                    tuple(
-                        "reference",
-                        "reference_gff",
-                        referenceGff.toAbsolutePath().normalize().toString(),
-                        referenceGff
-                    )
-                }
+        gffMetadataCh = params.mode == "ILLUMINA"
+            ? referenceMetadataChannel(
+                "referenceGff",
+                processInputs.out.refGff
+            )
             : channel.empty()
 
     emit:
-        gff_metadata_ch
+        gffMetadataCh
+        fastaMetadataCh
 }

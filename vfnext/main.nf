@@ -9,6 +9,14 @@ include {ILLUMINA} from './workflows/ILLUMINA.nf'
 include {NANOPORE} from './workflows/NANOPORE.nf'
 include {GENPLOTS} from './workflows/GENPLOTS.nf'
 include {METADATA} from './modules/metadata.nf'
+include {
+  metadataDir;
+  metadataFailureMessage;
+  writeRunManifest;
+  containerSpecChannel;
+  toolSpecChannel;
+  referenceMetadataChannel
+} from './modules/metadata_helpers.nf'
 
 // The code for the inital log info is based on the one found at FASTQC PIPELINE
 // https://github.com/angelovangel/nxf-fastqc/blob/master/main.nf
@@ -24,24 +32,26 @@ def ANSI_GREEN = "\033[1;32m"
 def ANSI_RED = "\033[1;31m"
 def ANSI_RESET = "\033[0m"
 
-MetadataHelper.writeManifest(workflow, params, "RUNNING")
+writeRunManifest(workflow, params, params.outDir, "RUNNING")
 
 workflow.onError = {
-  MetadataHelper.writeManifest(
+  writeRunManifest(
     workflow,
     params,
+    params.outDir,
     "FAILED",
-    MetadataHelper.failureMessage(workflow)
+    metadataFailureMessage(workflow)
   )
 }
 
 workflow.onComplete = {
   def finalStatus = workflow.success ? "SUCCESS" : "FAILED"
-  MetadataHelper.writeManifest(
+  writeRunManifest(
     workflow,
     params,
+    params.outDir,
     finalStatus,
-    workflow.success ? null : MetadataHelper.failureMessage(workflow)
+    workflow.success ? null : metadataFailureMessage(workflow)
   )
 
   if (workflow.success) {
@@ -63,6 +73,7 @@ log.info """
   parameters:
   -------------------------------------------
   --inDir            : ${params.inDir}
+  --samplesheet      : ${params.samplesheet}
   --outDir           : ${params.outDir}
   --virus            : ${params.virus}
   --refGenomeCode   *: ${params.refGenomeCode}
@@ -85,8 +96,8 @@ log.info """
   --mapping_quality  : ${params.mapping_quality}
   --base_quality     : ${params.base_quality}
   --minBamSize       : ${params.minBamSize}
-         
-        
+
+
   * Only required for "custom" virus
   Runtime data:
   -------------------------------------------
@@ -99,46 +110,22 @@ log.info """
 
   // open input channels
   processInputs()
-  reads_ch = processInputs.out.reads_ch
-  ref_gff = processInputs.out.ref_gff
-  ref_fa = processInputs.out.ref_fa
-  ref_gcode = processInputs.out.ref_gcode
+  readsCh = processInputs.out.readsCh
+  refGff = processInputs.out.refGff
+  refFa = processInputs.out.refFa
+  refGcode = processInputs.out.refGcode
 
-  reads_metadata_ch = reads_ch.flatMap { meta, files ->
-    def inputFiles = files instanceof List ? files : [files]
-    inputFiles.withIndex().collect { inputFile, index ->
-      tuple(
-        meta.id,
-        "fastq_${index + 1}",
-        inputFile.toAbsolutePath().normalize().toString(),
-        inputFile
-      )
-    }
-  }
+  readsMetadataCh = processInputs.out.sourceInputsCh
 
-  reference_metadata_ch = ref_fa.map { reference ->
-    tuple(
-      "reference",
-      "reference_fasta",
-      reference.toAbsolutePath().normalize().toString(),
-      reference
-    )
-  }
+  referenceMetadataCh = referenceMetadataChannel("reference_fasta", refFa)
 
-  gff_metadata_ch = params.mode == "ILLUMINA"
-    ? ref_gff
-        .filter { referenceGff -> referenceGff != null }
-        .map { referenceGff ->
-          tuple(
-            "reference",
-            "reference_gff",
-            referenceGff.toAbsolutePath().normalize().toString(),
-            referenceGff
-          )
-        }
+  gffMetadataCh = params.mode == "ILLUMINA"
+    ? referenceMetadataChannel("referenceGff", refGff)
     : channel.empty()
 
-  primer_metadata_ch = params.primersBED
+  // Both modes clip primers when a BED is supplied, so both record it as a run
+  // input.
+  primerMetadataCh = params.primersBED
     ? channel.of(
         tuple(
           "reference",
@@ -149,38 +136,43 @@ log.info """
       )
     : channel.empty()
 
-  checksum_inputs_ch = reads_metadata_ch
-    .concat(reference_metadata_ch)
-    .concat(gff_metadata_ch)
-    .concat(primer_metadata_ch)
+  samplesheetMetadataCh = params.samplesheet
+    ? channel.of(
+        tuple(
+          "__run__",
+          "samplesheet",
+          file(params.samplesheet).toAbsolutePath().normalize().toString(),
+          file(params.samplesheet)
+        )
+      )
+    : channel.empty()
 
-  tool_specs_ch = channel.fromList(
-    MetadataHelper.toolSpecs(params, workflow).collect { spec ->
-      tuple(spec.mode, spec.tool, spec.command, spec.container)
-    }
-  )
+  checksumInputsCh = readsMetadataCh
+    .concat(referenceMetadataCh)
+    .concat(gffMetadataCh)
+    .concat(primerMetadataCh)
+    .concat(samplesheetMetadataCh)
 
-  container_specs_ch = channel.fromList(
-    MetadataHelper.containerSpecs(params, workflow).collect { spec ->
-      tuple(spec.name, spec.kind, spec.identity)
-    }
-  )
+  toolSpecsCh = toolSpecChannel(params, workflow, workflow.containerEngine)
+
+  containerSpecsCh = containerSpecChannel(params, workflow.containerEngine)
 
   METADATA(
-    checksum_inputs_ch,
-    tool_specs_ch,
-    container_specs_ch,
-    MetadataHelper.metadataDir(params).toString()
+    checksumInputsCh,
+    toolSpecsCh,
+    containerSpecsCh,
+    processInputs.out.resolvedInputsCh,
+    metadataDir(params.outDir).toString()
   )
 
   if (params.mode == "ILLUMINA"){
-    ILLUMINA(reads_ch, ref_fa,ref_gff,ref_gcode)
-    GENPLOTS(ILLUMINA.out.bams_ch)
+    ILLUMINA(readsCh, refFa,refGff,refGcode)
+    GENPLOTS(ILLUMINA.out.bamsCh, params.depth)
   }
 
   if (params.mode == "NANOPORE"){
-    NANOPORE(reads_ch, ref_fa)
-    GENPLOTS(NANOPORE.out.bams_ch)
+    NANOPORE(readsCh, refFa)
+    GENPLOTS(NANOPORE.out.bamsCh, params.np_min_depth)
   }
 
 }

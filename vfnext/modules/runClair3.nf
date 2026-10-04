@@ -1,12 +1,15 @@
-process run_clair3{
+process runClair3{
     // Define the process parameters
-    publishDir "${params.outDir}/${meta.id}_results/", mode: 'copy', overwrite: true
+    publishDir { "${params.outDir}/${meta.id}_results/" }, mode: 'copy', overwrite: true
     tag "${meta.id}"
-    container "docker://hkubal/clair3:v1.2.0"
-    
+    // container is set from params.clair3_container in nextflow.config
+
     input:
         tuple val(meta), path(bam), path(bai)
         path(ref)
+        // Staged beside the reference so htslib finds it as <ref>.fai. Built
+        // once by runFaidx rather than in every task here.
+        path(ref_fai)
         val(chunk_size) // 10000
         val(qual) // 10
         val(map_qual) // 30
@@ -14,13 +17,11 @@ process run_clair3{
 
     output:
         tuple val(meta), path("${meta.id}.merge_output.vcf.gz")
-  
+
     script:
     """
     set -euo pipefail
 
-    samtools faidx ${ref}
-    
     run_clair3.sh \
         --enable_long_indel \
         --chunk_size=${chunk_size} \
@@ -35,7 +36,7 @@ process run_clair3{
         --include_all_ctgs \
         --qual=${qual} \
         --min_mq=${map_qual}
-    
+
     mv ./merge_output.vcf.gz ${meta.id}.merge_output.vcf.gz
     """
 }
