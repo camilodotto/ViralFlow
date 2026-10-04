@@ -51,52 +51,42 @@ class HelperCommandTests(unittest.TestCase):
         failure = subprocess.CalledProcessError(
             9, [sys.executable, "pull_containers.py", "amd64"]
         )
-        with patch("wrapper.subprocess.run", side_effect=failure) as run:
+        with patch(
+            "wrapper.container_management.prepare_containers", side_effect=failure
+        ) as run:
             with self.assertRaises(subprocess.CalledProcessError):
                 build_containers("/viralflow", "amd64")
         self.assertEqual(run.call_count, 1)
 
     def test_container_build_and_updates_use_checked_argument_lists(self):
         containers = Path("/viralflow/vfnext/containers")
-        with patch("wrapper.subprocess.run") as run:
+        prefix = [
+            "apptainer",
+            "exec",
+            "--overlay",
+            "pangolin_4.4.overlay",
+            str(containers / "pangolin:4.4.sif"),
+        ]
+        with (
+            patch("wrapper.container_management.prepare_containers") as prepare,
+            patch("wrapper.container_management.exec_prefix", return_value=prefix),
+            patch("wrapper.subprocess.run") as run,
+        ):
             build_containers("/viralflow", "arm64")
             update_pangolin("/viralflow")
             update_pangolin_data("/viralflow")
+        prepare.assert_called_once_with("/viralflow", "arm64", False, None)
 
         self.assertEqual(
             run.call_args_list,
             [
                 call(
-                    [sys.executable, "pull_containers.py", "arm64"],
+                    prefix + ["pangolin", "--update"],
                     cwd=containers,
                     check=True,
                 ),
                 call(
-                    [sys.executable, "build_containers.py", "arm64"],
-                    cwd=containers,
-                    check=True,
-                ),
-                call(
-                    [
-                        "singularity",
-                        "exec",
-                        "--writable",
-                        "./pangolin:4.4.sif",
-                        "pangolin",
-                        "--update",
-                    ],
-                    cwd=containers,
-                    check=True,
-                ),
-                call(
-                    [
-                        "singularity",
-                        "exec",
-                        "--writable",
-                        "./pangolin:4.4.sif",
-                        "pangolin",
-                        "--update-data",
-                    ],
+                    prefix + ["pangolin", "--update-data"],
                     cwd=containers,
                     check=True,
                 ),

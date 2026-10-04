@@ -3,6 +3,21 @@ nextflow_workflow {
     name "Test reproducibility metadata"
     script "tests/workflows/metadata-fixture.nf"
 
+    test("Should inventory and checksum the snpEff overlay actually attached") {
+        workflow "OVERLAY_METADATA_FIXTURE"
+        when {
+            params { engine = 'apptainer' }
+        }
+        then {
+            assert workflow.success
+            def row = path(workflow.out.overlays.get(0)).readLines().last().split('\t')
+            assert row[0] == 'snpeff_overlay'
+            assert row[1] == 'local_overlay'
+            assert row[3] == '15'
+            assert row[4].matches('[a-f0-9]{64}')
+        }
+    }
+
     test("Should write deterministic checksum, version, and container metadata") {
         workflow "METADATA_FIXTURE"
 

@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "capabilities": ["apptainer", "sif", "overlays", "container-status", "local-staging"],
+  "modes": ["ILLUMINA", "NANOPORE"],
+  "requirements": {"python": "3.12", "java": "17", "nextflow": "26.04.6"},
+  "viralFlowCmdParams": {
+    "run": "run",
+    "updatePangolin": "update-pangolin",
+    "updatePangolinData": "update-pangolin-data",
+    "addEntryToSnpeff": "add-entry-to-snpeff",
+    "buildContainers": "build-containers",
+    "containerStatus": "container-status"
+  }
+}

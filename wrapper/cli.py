@@ -182,9 +182,28 @@ def cli(ctx):
     type=click.Choice(["amd64", "arm64"], case_sensitive=False),
     help="Architecture to build containers",
 )
-def build_containers(arch):
+@click.option(
+    "--clean",
+    is_flag=True,
+    help="Back up existing containers/overlays before rebuilding.",
+)
+@click.option(
+    "--staging-dir",
+    type=click.Path(file_okay=False),
+    help="Local Linux staging directory (default: /var/tmp).",
+)
+def build_containers(arch, clean, staging_dir):
     """Build containers for vfnext."""
-    _call_helper(_build_containers, VF_ROOT_PATH, arch)
+    _call_helper(_build_containers, VF_ROOT_PATH, arch, clean, staging_dir)
+
+
+@cli.command("container-status")
+def container_status():
+    """Print JSON readiness for ILLUMINA and NANOPORE containers."""
+    import json
+    from .container_management import container_status as status
+
+    click.echo(json.dumps(status(VF_ROOT_PATH)))
 
 
 @cli.command("update-pangolin")

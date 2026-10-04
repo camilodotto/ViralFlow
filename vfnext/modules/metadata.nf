@@ -52,6 +52,13 @@ process checksumMetadataInput {
 process captureToolVersion {
     tag "${tool_name}"
     container "${container_identity}"
+    containerOptions {
+        def image = new File(container_identity.toString())
+        def filename = ['pangolin:4.4.sif': 'pangolin_4.4.overlay', 'snpeff:5.0.sif': 'snpeff_5.0.overlay'][image.name]
+        def overlay = filename && image.parent ? new File(image.parent, filename) : null
+        overlay?.isFile() && workflow.containerEngine in ['apptainer', 'singularity']
+            ? "--fakeroot --overlay '${overlay}:ro'" : ''
+    }
 
     input:
         tuple val(mode), val(tool_name), val(version_command), val(container_identity)
@@ -110,7 +117,7 @@ process captureContainerMetadata {
     set -euo pipefail
     ${portableFileMetrics()}
     case '${container_kind}' in
-        local_sif)
+        local_sif|local_overlay)
             if [[ -d '${container_identity}' ]]; then
                 echo "Configured SIF path is a directory: ${container_identity}" >&2
                 exit 1

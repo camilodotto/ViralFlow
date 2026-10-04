@@ -25,6 +25,18 @@ def fixtureEngine() {
     params.getOrDefault('engine', 'singularity')
 }
 
+workflow OVERLAY_METADATA_FIXTURE {
+    main:
+        def directory = java.nio.file.Files.createTempDirectory(workflow.workDir, 'overlay-metadata-')
+        java.nio.file.Files.writeString(directory.resolve('snpeff_5.0.overlay'), 'overlay fixture')
+        def configured = [mode: 'ILLUMINA', virus: 'custom', runSnpEff: true,
+            illumina_containers: params.illumina_containers + [snpeff: directory.resolve('snpeff:5.0.sif').toString()]]
+        overlaySpecs = containerSpecChannel(configured, fixtureEngine()).filter { name, kind, identity -> kind == 'local_overlay' }
+        captureContainerMetadata(overlaySpecs)
+    emit:
+        overlays = captureContainerMetadata.out
+}
+
 workflow METADATA_FIXTURE {
     main:
         def inputFile = file("${projectDir}/tests/data/bcftools/ref.fa")

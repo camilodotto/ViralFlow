@@ -317,6 +317,18 @@ def containerSpecs(params, engine) {
             names += ['pangolin', 'nextclade']
         }
         specs.addAll(names.collect { name -> illuminaContainerSpec(params, name) })
+        if (engine in ['apptainer', 'singularity']) {
+            def overlays = [pangolin: 'pangolin_4.4.overlay', snpeff: 'snpeff_5.0.overlay']
+            overlays.each { name, filename ->
+                if (name in names) {
+                    def image = (params.illumina_containers ?: [:])[name]
+                    def overlay = image ? new File(image.toString()).parent + '/' + filename : null
+                    if (overlay && new File(overlay).isFile()) {
+                        specs << [name: name + '_overlay', kind: 'local_overlay', identity: absoluteMetadataPath(overlay)]
+                    }
+                }
+            }
+        }
     }
     specs.unique { spec -> spec.identity }
 }

@@ -1,5 +1,30 @@
 # Installation
 
+## ViralFlow GUI compatibility
+
+The GUI integration requires the versioned `.viralflow-gui` marker shipped
+with this repository. Python 3.12+, Java 17 and Nextflow 26.04.6 are used by
+the GUI environment. The GUI executes the pipeline with the Apptainer profile.
+
+Prepare the existing tool images without changing their recipes:
+
+```bash
+viralflow build-containers --arch amd64 --staging-dir /var/tmp
+viralflow container-status
+```
+
+Use `--arch arm64` for native ARM images. Clair3 v1.2.0 is amd64 and needs
+working amd64 emulation on ARM; preparation checks actual execution before
+reporting Nanopore ready. Builds and overlay creation use a local Linux staging
+directory, not a shared macOS `/Users` mount. Pangolin and snpEff use persistent
+overlays: read-only during analysis and writable for maintenance.
+
+Normal preparation reuses existing images and overlays. Legacy Pangolin/snpEff
+sandboxes are converted to SIF with their contents preserved and their originals
+backed up. `--clean` explicitly backs up managed images/overlays to `backup-*`
+before rebuilding; preserve that backup if it contains customized databases.
+`container-status` reports readiness independently for ILLUMINA and NANOPORE.
+
 ## MacOS Installation
 
 Due to the limitation of using singularity on MacOS, to run ViralFlow on this type of system, we suggest using a Linux virtualization software called [Lima](https://github.com/lima-vm/lima).

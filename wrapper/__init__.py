@@ -3,7 +3,6 @@ import subprocess
 import shlex
 import tempfile
 import re
-import sys
 from pathlib import Path
 
 
@@ -21,15 +20,23 @@ def add_entries_to_DB(root_path, org_name, refseq_code, arch):
             "Genome code must start with a letter or number and contain only letters, numbers, dots, underscores, and hyphens"
         )
     containers_dir = Path(root_path) / "vfnext" / "containers"
+    script = (
+        "add_entries_SnpeffOverlay.sh"
+        if (containers_dir / "snpeff_5.0.overlay").is_file()
+        else "add_entries_SnpeffDB.sh"
+    )
     command = [
         "bash",
-        str(containers_dir / "add_entries_SnpeffDB.sh"),
+        str(containers_dir / script),
         org_name,
         refseq_code,
         arch,
     ]
     print(shlex.join(command))
     subprocess.run(command, cwd=containers_dir, check=True)
+    from .container_management import record_overlay_update
+
+    record_overlay_update(containers_dir, ["snpeff_5.0.overlay", "snpEff_DB.catalog"])
 
 
 def parse_csv(csv_flpath):
@@ -47,17 +54,13 @@ def parse_csv(csv_flpath):
     return entries_lst
 
 
-def build_containers(root_path, arch: str):
+def build_containers(root_path, arch: str, clean=False, staging_dir=None):
     """
     run script to build container for vfnext
     """
-    containers_dir = Path(root_path) / "vfnext" / "containers"
-    subprocess.run(
-        [sys.executable, "pull_containers.py", arch], cwd=containers_dir, check=True
-    )
-    subprocess.run(
-        [sys.executable, "build_containers.py", arch], cwd=containers_dir, check=True
-    )
+    from .container_management import prepare_containers
+
+    prepare_containers(root_path, arch, clean, staging_dir)
 
 
 # Parameters that only NANOPORE mode reads, by their nextflow.config names. The
@@ -191,35 +194,33 @@ def parse_params(in_flpath, overrides=None):
 
 
 def update_pangolin(root_path):
+    from .container_management import exec_prefix
+
     containers_dir = Path(root_path) / "vfnext" / "containers"
     subprocess.run(
-        [
-            "singularity",
-            "exec",
-            "--writable",
-            "./pangolin:4.4.sif",
-            "pangolin",
-            "--update",
-        ],
+        exec_prefix(containers_dir, "pangolin:4.4.sif", writable=True)
+        + ["pangolin", "--update"],
         cwd=containers_dir,
         check=True,
     )
+    from .container_management import record_overlay_update
+
+    record_overlay_update(containers_dir, ["pangolin_4.4.overlay"])
 
 
 def update_pangolin_data(root_path):
+    from .container_management import exec_prefix
+
     containers_dir = Path(root_path) / "vfnext" / "containers"
     subprocess.run(
-        [
-            "singularity",
-            "exec",
-            "--writable",
-            "./pangolin:4.4.sif",
-            "pangolin",
-            "--update-data",
-        ],
+        exec_prefix(containers_dir, "pangolin:4.4.sif", writable=True)
+        + ["pangolin", "--update-data"],
         cwd=containers_dir,
         check=True,
     )
+    from .container_management import record_overlay_update
+
+    record_overlay_update(containers_dir, ["pangolin_4.4.overlay"])
 
 
 def run_vfnext(root_path, params_fl, mode, cli_params=None, profile=None):
@@ -280,6 +281,10 @@ def run_vfnext(root_path, params_fl, mode, cli_params=None, profile=None):
         command.extend(["--mode", resolved_mode])
     if profile:
         command.extend(["-profile", profile])
+    if profile in ("apptainer", "singularity"):
+        from .container_management import ensure_snpeff_database
+
+        ensure_snpeff_database(root_path, args, resolved_mode)
     print(f"NXF_VER={shlex.quote(nxtflw_ver)} {shlex.join(command)}")
     subprocess.run(command, env=run_env, check=True)
 
