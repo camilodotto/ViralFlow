@@ -86,6 +86,7 @@ NANOPORE_PARAMS = (
 
 # The two NANOPORE images may be a local SIF or a registry reference.
 CONTAINER_PARAMS = ("base_container", "clair3_container")
+MEMORY_PARAMS = ("porechop_memory", "minimap_memory", "clair3_memory")
 
 
 def container_reference(value):
@@ -159,9 +160,16 @@ def parse_params(in_flpath, overrides=None):
             value = fields[1].strip() if len(fields) == 2 else ""
             if not value or value == "null":
                 continue
+            # The CLI already accepts Nextflow memory literals with spaces.
+            # Forward the same literal from a params file as one argv value.
+            if key in MEMORY_PARAMS and not re.fullmatch(
+                r"\d+(\.\d+)?\s*\.?\s*[KMGTP]?B", value, flags=re.IGNORECASE
+            ):
+                raise ValueError(f"Line {line_number}: {key} is not a valid memory size")
             if (
                 key not in path_params
                 and key not in CONTAINER_PARAMS
+                and key not in MEMORY_PARAMS
                 and len(value.split()) > 1
             ):
                 raise ValueError(f"Line {line_number}: {key} accepts a single value")

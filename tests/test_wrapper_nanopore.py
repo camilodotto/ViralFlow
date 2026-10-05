@@ -190,6 +190,30 @@ class NanoporeCliTests(unittest.TestCase):
         self.assertEqual(run.call_args.args[3]["base_container"], str(image.resolve()))
 
 
+class NanoporeMemoryFileTests(unittest.TestCase):
+    def test_params_files_preserve_all_supported_memory_literals(self):
+        for key in ("porechop_memory", "minimap_memory", "clair3_memory"):
+            for value in ("4.GB", "4GB", "4 GB", "1.5 GB"):
+                with self.subTest(key=key, value=value):
+                    with tempfile.TemporaryDirectory() as directory:
+                        params = write_params(directory, f"mode NANOPORE\n{key} {value}\n")
+                        self.assertEqual(forwarded(parse_params(params), f"--{key}"), value)
+
+    def test_invalid_memory_values_are_not_forwarded(self):
+        for value in ("8 bananas", "8 GB --mode ILLUMINA"):
+            with self.subTest(value=value):
+                with tempfile.TemporaryDirectory() as directory:
+                    params = write_params(directory, f"mode NANOPORE\nclair3_memory {value}\n")
+                    with self.assertRaisesRegex(ValueError, "valid memory size"):
+                        parse_params(params)
+
+    def test_space_exemption_does_not_apply_to_model_names(self):
+        with tempfile.TemporaryDirectory() as directory:
+            params = write_params(directory, "mode NANOPORE\nclair3_model multiple words\n")
+            with self.assertRaisesRegex(ValueError, "single value"):
+                parse_params(params)
+
+
 class NanoporeOptionTableTests(unittest.TestCase):
     def test_the_cli_covers_every_nanopore_parameter(self):
         self.assertEqual(
