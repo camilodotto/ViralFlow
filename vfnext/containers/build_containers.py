@@ -222,6 +222,7 @@ def main() -> int:
         except subprocess.CalledProcessError as e:
             remove_path(src)
             cleanup_dir(tmpdir)
+            ensure_dir(tmpdir)
             print(" > Failed <")
             failed.append((image_name, " ".join(cmd)))
             eprint(f"Error: {e}")
