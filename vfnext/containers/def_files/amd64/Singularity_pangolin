@@ -1,5 +1,5 @@
-Bootstrap: library
-From: debian:11
+Bootstrap: docker
+From: debian:12-slim
 
 %environment
     export PATH=$PATH:/usr/local/bin/micromamba:/usr/local/bin/mm:/usr/local/bin/mm/bin
