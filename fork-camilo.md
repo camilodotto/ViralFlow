@@ -270,6 +270,9 @@ construção. Singularity não satisfaz mais esse fluxo.
   Git.
 - Fixa `setuptools` abaixo da versão 81 e usa `--no-build-isolation` para
   compatibilidade com o processo atual de build.
+- Restringe `snakemake-interface-common` a `>=1.20.1,<1.23` e `packaging` a
+  `>=24,<26`, compatíveis com o Snakemake usado pelo Pangolin. Executa
+  `pip check` antes de concluir a construção.
 
 #### `vfnext/containers/def_files/arm64/Singularity_pangolin`
 
@@ -278,6 +281,9 @@ construção. Singularity não satisfaz mais esse fluxo.
 - Instala Pangolin e projetos relacionados via pip/Git com
   `--no-build-isolation`.
 - Substitui a instalação de `setuptools==81.0.0` por `setuptools<81`.
+- Usa as mesmas restrições de interface-common/packaging e verificação de
+  dependências da definição amd64. Esta correção foi testada em amd64;
+  a reconstrução arm64 ainda precisa de validação própria.
 
 #### `vfnext/containers/def_files/amd64/Singularity_snpEff`
 
@@ -323,6 +329,11 @@ As principais alterações são:
 - fallback da release mais recente para paginação das tags;
 - aceitação apenas de tags estáveis no formato `vX.Y` ou `vX.Y.Z`;
 - atualização ordenada das dependências do Pangolin;
+- resolução conjunta de `snakemake>=8,<9.28`,
+  `snakemake-interface-common>=1.20.1,<1.23` e `packaging>=24,<26` na atualização;
+  Snakemake 9.27.0 exige packaging<26, enquanto interface-common 1.23.1 exige
+  packaging>=26.1. Essas restrições também permitem reparar overlays que
+  ficaram incompatíveis após a atualização anterior;
 - execução de `pip check` após a atualização;
 - atualização separada dos dados do Pangolin no mesmo overlay;
 - possibilidade de sobrescrever a versão do Nextflow pela variável `NXF_VER`,

@@ -17,12 +17,13 @@ From: debian:12-slim
     micromamba activate
     micromamba config append channels conda-forge --env
     micromamba self-update
-    micromamba install -y -c bioconda -c conda-forge python=3.11 usher=0.6.2 snakemake-minimal==9.19.0 minimap2 gofasta ucsc-fatovcf procps-ng git pip
+    micromamba install -y -c bioconda -c conda-forge python=3.11 usher=0.6.2 snakemake-minimal==9.19.0 "snakemake-interface-common>=1.20.1,<1.23" "packaging>=24,<26" minimap2 gofasta ucsc-fatovcf procps-ng git pip
     python -m pip install "setuptools<81" wheel
     python -m pip install --no-build-isolation git+https://github.com/cov-lineages/pangolin.git@v4.4
     python -m pip install --no-build-isolation git+https://github.com/cov-lineages/pangolin-data.git
     python -m pip install --no-build-isolation git+https://github.com/cov-lineages/scorpio.git
     python -m pip install --no-build-isolation git+https://github.com/cov-lineages/constellations.git
+    python -m pip check
 
     apt-get clean
     micromamba clean --all --yes

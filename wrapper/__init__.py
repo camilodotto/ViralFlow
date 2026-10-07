@@ -419,7 +419,11 @@ def update_pangolin(root_path):
             "bioconda",
             "-c",
             "conda-forge",
-            "snakemake>=8",
+            # Snakemake 9.27 requires packaging<26, whereas interface-common
+            # 1.23 requires packaging>=26.1. Resolve a compatible set together.
+            "snakemake>=8,<9.28",
+            "snakemake-interface-common>=1.20.1,<1.23",
+            "packaging>=24,<26",
         ],
         cwd=containers_dir,
     )
