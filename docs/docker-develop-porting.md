@@ -310,3 +310,44 @@ atualizar VIRALFLOW_COMMIT no Compose/Dockerfile ou passá-lo pelo ambiente, e
 exportar novamente o working tree. O commit exportado deve coincidir com o
 commit pedido no build. /opt/viralflow-image-revision e
 /opt/viralflow-image-local-changes.patch identificam a base e as diferenças.
+
+
+## 2026-10-09 — gráficos dos resultados compilados
+
+Origem: branch `docker/develop-SIF3-MAC`, commit
+`984f4b6746c8ab98910e2641b60f53dae5607e1a`.
+Destino: working tree de `docker/develop`, base `1bc34d3`.
+
+Arquivo alterado: `vfnext/bin/compileOutput.py`.
+A comparação entre as branches mostrou que as diferenças nesse arquivo eram
+apenas a geração de quatro gráficos SVG, seus helpers e as chamadas após
+escrever as tabelas compiladas. Foi trazida essa implementação integralmente,
+sem alterações nos módulos Nextflow, nas definições de containers ou no
+cálculo das métricas existentes. Não há dependências gráficas novas: a geração
+usa pandas já instalado, `math` da biblioteca padrão e escrita de SVG.
+
+Arquivos gerados automaticamente em `COMPILED_OUTPUT/`:
+
+- `reads_count_plot.svg`: quantidade total de reads por amostra;
+- `coverage_plot.svg`: amplitude de cobertura versus profundidade média;
+- `coverage_breadth_summary_plot.svg`: distribuição nas faixas 0–30%,
+  acima de 30% e abaixo de 70%, e 70–100%;
+- `coverage_breadth_decile_plot.svg`: distribuição em intervalos de 10%.
+
+A implementação mantém os rótulos, a ordenação, o destaque dos controles
+Cneg, a regressão do gráfico de cobertura e o tratamento de dados ausentes da
+branch de origem. Os gráficos de cobertura são chamados nos fluxos
+`sars-cov2` e `custom`; esta rodada verificou resultados SARS-CoV-2.
+
+Validação: recompilação dos resultados existentes das quatro amostras do teste
+GUI, em diretórios separados, usando o script anterior e o script com gráficos.
+Os dez CSVs e `seqbatch.fa` ficaram idênticos byte a byte. Os quatro SVGs foram
+gerados, são XML válido e não contêm coordenadas NaN. Importação do script e
+`git diff --check` passaram. Não foi reexecutada a análise científica completa.
+
+Artefatos locais em ViralFlowGui:
+`docker-data/plots-port-validation/ported/`, logs `baseline.log` e `ported.log`,
+e `validation.json` na pasta `docker-data/plots-port-validation/`.
+Nenhuma imagem Docker foi reconstruída. Para incluir os gráficos nas imagens,
+publique este código, atualize `VIRALFLOW_COMMIT` em `docker/Dockerfile` do
+ViralFlowGui e reconstrua a GUI pelo Compose (que constrói a base CLI).
