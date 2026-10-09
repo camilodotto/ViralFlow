@@ -10,9 +10,12 @@ containers = [
 ]
 
 # temporary logic, before push to remote repo
+# Root inside privileged Docker can build directly; fakeroot requires subuid
+# mappings that are unnecessary for an already privileged user.
+fakeroot_option = "--fakeroot" if os.geteuid() != 0 else ""
 container_commands = [
-    f"singularity build -F --fakeroot --sandbox pangolin:4.4.sif def_files/{arch}/Singularity_pangolin",
-    f"singularity build -F --fakeroot --sandbox snpeff:5.0.sif def_files/{arch}/Singularity_snpEff"
+    f"singularity build -F {fakeroot_option} --sandbox pangolin:4.4.sif def_files/{arch}/Singularity_pangolin",
+    f"singularity build -F {fakeroot_option} --sandbox snpeff:5.0.sif def_files/{arch}/Singularity_snpEff"
 ]
 
 failed_containers = []
@@ -88,6 +91,7 @@ if success:
     # Check if unsquashfs is in the correct location
     unsquashfs_desired_location = "/usr/local/bin/unsquashfs"
     if not os.path.exists(unsquashfs_desired_location):
+        success = False
         print("\n\033[91mError:\n  > unsquashfs executable not found at expected location. You should create a symbolic link using the following command:\033[0m")
         unsquashfs_location = os.path.join(os.environ["HOME"], "miniconda3/envs/viralflow/bin/unsquashfs")
         print(f"   >  sudo ln -s {unsquashfs_location} /usr/local/bin/unsquashfs\n")
@@ -101,3 +105,5 @@ if success:
 if success:
     print("\nAll steps from '-build_containers' completed successfully. You can test ViralFlow using the following command:")
     print("   > viralflow run --params-file test_files/sars-cov-2.params")
+
+sys.exit(0 if success else 1)

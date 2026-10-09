@@ -43,11 +43,13 @@ def check_containers(containers_name_list, downloaded_list):
 
 def containers_routine_pull(missing_containers_list, containers_dir, containers_names_list):
     lost_containers = missing_containers_list
-    attempts = len(lost_containers) * 3
-    while len(lost_containers) > 0 or attempts > 0:
-        container_pull(containers_dir, missing_containers_list)
+    attempts = 3
+    while lost_containers and attempts > 0:
+        container_pull(containers_dir, lost_containers)
         lost_containers = check_containers(containers_names_list, containers_dir)
         attempts -= 1
         if len(lost_containers) == 0:
             break
-
+    if lost_containers:
+        missing = ", ".join(container[1] for container in lost_containers)
+        raise RuntimeError(f"Failed to download required containers after 3 attempts: {missing}")

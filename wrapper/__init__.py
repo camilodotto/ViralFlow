@@ -1,6 +1,19 @@
 from distutils.command.build_scripts import first_line_re
 from logging import root
 import os
+import subprocess
+import sys
+
+import click
+
+
+def _run_checked(command, **kwargs):
+    try:
+        subprocess.run(command, check=True, **kwargs)
+    except subprocess.CalledProcessError as error:
+        raise click.ClickException(
+            f"Command failed with exit code {error.returncode}: {command}"
+        ) from error
 
 
 def add_entries_to_DB(root_path, org_name, refseq_code, arch):
@@ -30,12 +43,9 @@ def build_containers(root_path, arch: str):
     run script to build container for vfnext
     """
     # build containers
-    cd_to_dir= f"cd {root_path}/vfnext/containers/" 
-    build_sandbox = f"python ./build_containers.py {arch}"
-    pull_containers = f"python ./pull_containers.py {arch}"
-    os.system(cd_to_dir+';'+pull_containers) 
-    print(cd_to_dir+';'+build_sandbox)
-    os.system(cd_to_dir+';'+build_sandbox)
+    containers_dir = os.path.join(root_path, "vfnext", "containers")
+    _run_checked([sys.executable, "pull_containers.py", arch], cwd=containers_dir)
+    _run_checked([sys.executable, "build_containers.py", arch], cwd=containers_dir)
     
 
 # input args file load
@@ -131,4 +141,4 @@ def run_vfnext(root_path, params_fl):
     nxtflw_ver="22.04.0"
     run_nxtfl_cmd = f"NXF_VER={nxtflw_ver} nextflow run {root_path}/vfnext/main.nf {args_str}"
     print(run_nxtfl_cmd)
-    os.system(run_nxtfl_cmd)
+    _run_checked(run_nxtfl_cmd, shell=True)
