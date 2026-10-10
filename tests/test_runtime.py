@@ -33,6 +33,48 @@ class RuntimeTests(unittest.TestCase):
                 wrapper.run_vfnext(str(ROOT), "unused.params")
         self.assertEqual(raised.exception.code, 42)
 
+    def test_selected_nextflow_is_used_instead_of_external_path(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            parent = Path(temporary)
+            external = parent / "external"
+            external.mkdir()
+            marker = external / "used"
+            trap = external / "nextflow"
+            trap.write_text(f"#!/bin/sh\ntouch '{marker}'\nexit 91\n")
+            trap.chmod(0o755)
+            for name in ("first installation", "second installation's bin"):
+                root = parent / name
+                binary = root / "bin/nextflow"
+                binary.parent.mkdir(parents=True)
+                binary.write_text('#!/bin/sh\nprintf "%s\\n" "$0" "$NXF_VER" "$@" > "$TEST_NEXTFLOW_LOG"\n')
+                binary.chmod(0o755)
+                log = root / "invocation.txt"
+                with patch.dict(os.environ, {
+                        "VIRALFLOW_NEXTFLOW": str(binary), "NXF_VER": "23.10.1",
+                        "TEST_NEXTFLOW_LOG": str(log), "PATH": f"{external}:{os.environ['PATH']}"}), \
+                        patch.object(wrapper, "parse_params", return_value="-resume"):
+                    wrapper.run_vfnext(str(root), "unused.params")
+                self.assertEqual(log.read_text().splitlines(), [
+                    str(binary), "23.10.1", "run", str(root / "vfnext/main.nf"), "-resume"])
+            self.assertFalse(marker.exists())
+
+    def test_invalid_selected_nextflow_cannot_fall_back_to_path(self):
+        for binary in ("nextflow", "/nonexistent/viralflow-test/bin/nextflow"):
+            with self.subTest(binary=binary), \
+                    patch.dict(os.environ, {"VIRALFLOW_NEXTFLOW": binary}), \
+                    patch.object(wrapper, "parse_params", return_value=""), \
+                    patch.object(wrapper.subprocess, "call") as run:
+                with self.assertRaises(FileNotFoundError):
+                    wrapper.run_vfnext(str(ROOT), "unused.params")
+                run.assert_not_called()
+
+    def test_cli_without_selected_nextflow_keeps_path_behavior(self):
+        with patch.dict(os.environ, {"VIRALFLOW_NEXTFLOW": "", "NXF_VER": "23.10.1"}), \
+                patch.object(wrapper, "parse_params", return_value="-resume"), \
+                patch.object(wrapper.subprocess, "call", return_value=0) as run:
+            wrapper.run_vfnext("/cli", "unused.params")
+        self.assertEqual(run.call_args.args[0], "NXF_VER=23.10.1 nextflow run /cli/vfnext/main.nf -resume")
+
     def test_pangolin_update_failure_is_reported_and_temporary_files_removed(self):
         for update, option in ((wrapper.update_pangolin, "--update"),
                                (wrapper.update_pangolin_data, "--update-data")):

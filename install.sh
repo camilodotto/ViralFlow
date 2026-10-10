@@ -355,6 +355,7 @@ write_linux_launcher() {
 #!/usr/bin/env bash
 set -euo pipefail
 export MAMBA_ROOT_PREFIX=$(printf '%q' "${MAMBA_ROOT_PREFIX}")
+export VIRALFLOW_NEXTFLOW=$(printf '%q' "${BIN_DIR}/nextflow")
 export NXF_HOME=$(printf '%q' "${INSTALL_ROOT}/nextflow")
 export NXF_VER=$(printf '%q' "${NEXTFLOW_VERSION}")
 export PATH=$(printf '%q' "${BIN_DIR}"):\${PATH}

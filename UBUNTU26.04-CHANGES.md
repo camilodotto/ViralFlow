@@ -278,6 +278,38 @@ teste; o cache dentro do container é definido pela configuração de produção
 A opção de ambiente está documentada em
 [Apptainer: environment and metadata](https://apptainer.org/docs/user/latest/environment_and_metadata.html).
 
+## Seleção explícita do Nextflow instalado pela GUI — 10/10/2026
+
+A GUI agora seleciona exclusivamente os binários em sua pasta `bin`
+configurada, por padrão `~/ViralFlowGUI/bin`, e informa ao ViralFlow o
+caminho completo do Nextflow através de `VIRALFLOW_NEXTFLOW`.
+
+| Arquivo alterado nesta etapa | Alteração |
+| --- | --- |
+| `wrapper/__init__.py` | Aceita `VIRALFLOW_NEXTFLOW` como caminho absoluto de um executável existente. Um caminho explícito inválido interrompe a execução, sem procurar outro Nextflow no PATH. Aplica quoting ao executável, versão e caminho de `main.nf`; preserva o parser de parâmetros, argumentos científicos e propagação de falhas. Sem a variável, mantém a chamada CLI tradicional pelo PATH. |
+| `install.sh` | O launcher gerado também informa o Nextflow da pasta de binários escolhida, mantendo a chamada independente de outras instalações. Versões e demais opções do instalador permanecem inalteradas. |
+| `tests/test_runtime.py` | Três regressões adicionais: duas instalações com caminhos contendo espaços/apóstrofo e outro Nextflow no PATH; rejeição de caminho explícito ausente/relativo; preservação do CLI sem seleção explícita. Total atual: 12 testes. |
+| `UBUNTU26.04-CHANGES.md` | Este registro por arquivo, evidências e limites. |
+
+Nenhum arquivo foi inserido/removido nesta etapa de código. Os módulos,
+workflows, parâmetros, comandos científicos e containers permanecem iguais.
+Os ajustes da GUI estão registrados em
+[ViralFlowGui/UBUNTU26.04-COMPATIBILITY.md](../ViralFlowGui/UBUNTU26.04-COMPATIBILITY.md).
+
+Os 12 testes Python e os testes shell do instalador passaram. O wrapper
+também executou no host duas tarefas Nextflow reais de escrita de marcador,
+usando os binários 23.10.1 baixados pelos instaladores da GUI e caches
+independentes. Binários externos deliberados no PATH não foram utilizados.
+As evidências estão em `.venv/ubuntu26.04/validation/gui-bin/report.json` e
+nas pastas `installation-A/` e `installation-B/`. Foram reutilizados Java 17
+e Python do ambiente local de validação, sem análise biológica.
+
+O teste inicial com espaços no caminho do cache mostrou uma limitação do
+classpath do launcher Nextflow 23.10.1. O teste final usa cache/framework sem
+espaços, como na configuração padrão da GUI, e não modifica o launcher
+upstream. As instalações reais do usuário, pacotes GUI e branches remotas
+não foram alterados por esta validação.
+
 ## Referências de compatibilidade
 
 - [Backend Apptainer no Nextflow](https://docs.seqera.io/nextflow/reference/config/apptainer).

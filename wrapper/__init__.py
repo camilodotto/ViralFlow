@@ -1,4 +1,5 @@
 import os
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -143,7 +144,16 @@ def run_vfnext(root_path, params_fl):
     # get nextflow arguments
     args_str = parse_params(params_fl)
     nxtflw_ver = os.environ.get("NXF_VER", "23.10.1")
-    run_nxtfl_cmd = f"NXF_VER={nxtflw_ver} nextflow run {root_path}/vfnext/main.nf {args_str}"
+    configured_nextflow = os.environ.get("VIRALFLOW_NEXTFLOW")
+    nextflow = configured_nextflow or "nextflow"
+    if configured_nextflow and (
+            not os.path.isabs(nextflow) or not os.path.isfile(nextflow)
+            or not os.access(nextflow, os.X_OK)):
+        raise FileNotFoundError(f"Nextflow executable not found at the configured absolute path: {nextflow}")
+    run_nxtfl_cmd = (
+        f"NXF_VER={shlex.quote(nxtflw_ver)} {shlex.quote(nextflow)} run "
+        f"{shlex.quote(os.path.join(root_path, 'vfnext', 'main.nf'))} {args_str}"
+    )
     print(run_nxtfl_cmd)
     result = subprocess.call(run_nxtfl_cmd, shell=True)
     if result:
