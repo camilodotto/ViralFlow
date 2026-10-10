@@ -2,45 +2,37 @@
 
 ## Ubuntu 26.04 con Apptainer
 
-Esta branch utiliza Apptainer directamente en Ubuntu. El instalador se adaptó
-de `develop-SIF3-MAC`, conservando la instalación Linux:
+Esta branch utiliza Micromamba 1.5.7, Nextflow 22.04.0 y Java 17.
+Apptainer ejecuta los contenedores mediante su comando de compatibilidad
+`singularity`; `singularity --version` debe informar Apptainer. Pangolin y snpEff
+permanecen como **directorios sandbox**, a pesar de su sufijo `.sif`; las demás
+imágenes son SIF.
+
+La GUI de ViralFlow administra la instalación en pasos separados: Micromamba,
+Nextflow, Apptainer, ViralFlow y contenedores. Las rutas predeterminadas son
+`~/ViralFlowGUI/bin`, `~/ViralFlowGUI/micromamba` y `~/ViralFlowGUI/ViralFlow`.
+Esta branch no proporciona `install.sh`.
+
+Para instalar manualmente, instale primero estas dependencias, coloque sus
+comandos en `PATH` y cree el entorno con el YAML de la arquitectura:
 
 ```bash
 git clone -b feat/develop/ubuntu26.04 https://github.com/camilodotto/ViralFlow.git
 cd ViralFlow
-bash install.sh --repo-dir "$PWD"
-export PATH="$HOME/.local/bin:$PATH"
-viralflow --version
+micromamba env create -n viralflow -f envs/amd64.yml -y
+micromamba run -n viralflow python -m pip install -e .
+NXF_VER=22.04.0 micromamba run -n viralflow nextflow -version
+micromamba run -n viralflow viralflow --version
 ```
 
-Instala el entorno Micromamba, Java 17 y el launcher compacto de Nextflow 23.10.1,
-que resuelve dependencias en el primer uso. Reutiliza Apptainer o lo instala
-desde el PPA oficial de Ubuntu.
-Los paquetes del sistema y los mapeos fakeroot ausentes usan `sudo`.
-Pangolin y snpEff permanecen como **directorios sandbox**, aunque sus nombres
-terminan en `.sif`; las demás imágenes permanecen en formato SIF. No requiere
-Docker Engine.
-
-Para reutilizar el checkout y las dependencias del sistema:
-
-```bash
-bash install.sh --repo-dir "$PWD" --no-update --skip-system-packages
-```
-
-`--dry-run` simula la instalación, `--skip-containers` instala solamente el
-entorno y `--no-path-update` conserva los archivos de inicio del shell.
-`--install-root` y `--bin-dir` permiten instalaciones separadas. Los cambios
-locales se conservan. Basta tener `unsquashfs` en `PATH`; no se requiere un
-enlace en `/usr/local/bin`.
-
-El comando `viralflow` generado selecciona Java desde Micromamba y conserva
-la caché Nextflow en el directorio de instalación. La ejecución directa exige
-Nextflow >=23.10.1 y Java 17. ARM64 conserva sus definiciones; la validación
-de este host corresponde a AMD64.
-
-Consulte el [registro de migración](../UBUNTU26.04-CHANGES.md) para los cambios
-por archivo y los resultados. Las instrucciones manuales siguientes describen
-las instalaciones Ubuntu anteriores; en esta branch utilice el instalador.
+Java 17 y Nextflow 22.04.0 están definidos en el YAML, como en el entorno
+original. La GUI también instala su launcher Nextflow en `bin` y selecciona
+esa ruta absoluta. Apptainer está instalado en el host. Para actualizar un entorno existente, utilice
+`micromamba update -n viralflow -f envs/amd64.yml --prune -y`.
+La GUI selecciona su propio binario Nextflow y mantiene la caché bajo la raíz
+de la instalación. Consulte el [registro de migración](../UBUNTU26.04-CHANGES.md)
+para cambios y validación. Las instrucciones siguientes describen las
+instalaciones anteriores.
 
 ## Instalación en MacOS
 

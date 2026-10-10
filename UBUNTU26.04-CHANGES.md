@@ -1,321 +1,241 @@
-# Migração do ambiente de execução para Ubuntu 26.04
+# Diferenças em relação a WallauBioinfo/develop
 
-Data: 09/10/2026. Branch: `feat/develop/ubuntu26.04`.
-Base local: `7575673` (já continha os gráficos de `compileOutput.py`).
-As diferenças desse commit em relação a `WallauBioinfo/develop` são anteriores
-a esta migração e não foram modificadas.
+## Resumo
 
-## Escopo
+A branch `feat/develop/ubuntu26.04` adapta a instalação e o ambiente de
+execução do ViralFlow para Ubuntu 26.04 com Apptainer, preservando Nextflow
+22.04.0 e Java 17. A GUI utiliza Micromamba 1.5.7 e instala o ambiente
+diretamente. Nextflow executa os containers pelo backend `singularity`, usando
+o comando de compatibilidade fornecido pelo Apptainer.
 
-Instalação e execução diretamente no host com Apptainer. As imagens mantêm
-seus nomes e versões; pangolin e snpEff continuam em sandbox. Não foram
-alterados `vfnext/main.nf`, módulos, workflows, scripts de análise, parâmetros
-científicos padrão. A adaptação posterior da GUI está registrada separadamente
-em [ViralFlowGui/UBUNTU26.04-COMPATIBILITY.md](../ViralFlowGui/UBUNTU26.04-COMPATIBILITY.md).
-As branches Docker foram preservadas.
-O instalador foi trazido da `develop-SIF3-MAC`, sem importar seus overlays,
-alterações científicas ou mecanismos específicos de macOS e outras distribuições.
+Pangolin e snpEff continuam como diretórios sandbox, embora seus nomes terminem
+em `.sif`; as demais imagens permanecem em formato SIF. As diferenças de
+execução tratam da construção e manutenção desses containers, dependências,
+cache gravável, tratamento de erros e seleção explícita do Nextflow da
+instalação escolhida pela GUI.
 
-## Registro por arquivo
+A comparação também inclui quatro gráficos SVG acrescentados à compilação
+dos resultados em `vfnext/bin/compileOutput.py`. O fluxo principal, os módulos,
+os workflows e os parâmetros científicos padrão permanecem iguais ao upstream.
 
-Este arquivo também foi atualizado para referenciar a verificação de
-compatibilidade da GUI, desenvolvida na branch `v0.53` (versão `0.53.0`)
-do repositório ViralFlowGui e compatível com esta branch do ViralFlow.
-Nessa etapa, somente este documento foi
-alterado no repositório ViralFlow; não foi acrescentada opção de limpeza
-ao CLI. O registro da GUI descreve individualmente seus arquivos alterados
-e inseridos.
+A referência desta comparação é `WallauBioinfo/develop`, commit
+`16cb3f30b1d3`. O documento descreve o conteúdo atual da branch, incluindo as
+alterações locais ainda não commitadas. São **18 arquivos diferentes:
+14 modificados e 4 adicionados**. Nenhum arquivo da referência foi removido.
 
-| Arquivo | Operação | Alteração e motivo |
-| --- | --- | --- |
-| `install.sh` | Inserido, executável | Instalador derivado de `develop-SIF3-MAC`, limitado à instalação Ubuntu/Linux. Seleciona esta branch e Nextflow 23.10.1; utiliza Micromamba 2.9.0 em novas instalações. Reutiliza Apptainer existente e instala pelo PPA quando necessário. Inclui `--skip-system-packages` e `--no-path-update`, preserva checkout com alterações locais, normaliza caminhos relativos, corrige expansão de `~/`, identifica o ambiente pela raiz selecionada e verifica o runtime antes de construir containers. Baixa o launcher oficial compacto da versão selecionada e mantém seu cache na raiz da instalação; resolução Maven é verificada antes de construir containers. |
-| `envs/amd64.yml` | Alterado | Remove SingularityCE, spython e Nextflow 22.04.0. Apptainer é fornecido pelo host e Nextflow pelo instalador. Remove canais antigos/duplicados e canais desnecessários, mantendo bioconda e conda-forge para reduzir resolução e cache de metadados. Preserva as demais dependências e Java 17. |
-| `envs/arm64.yml` | Alterado | Remove spython e Nextflow 22.04.0; preserva as demais dependências. Nextflow é instalado separadamente. ARM64 não foi executado neste host AMD64. |
-| `wrapper/__init__.py` | Alterado | Remove imports sem uso de `distutils` e `logging`; `distutils` não existe no Python moderno. Troca manutenção pangolin para Apptainer, mantendo `--writable` e sandbox. Usa argumentos separados e propaga falhas nas duas atualizações pangolin e na inclusão snpEff, preservando nomes/caminhos com espaços. Restringe temporariamente o setuptools de build a `<81` para os instaladores legados, sem modificar pacotes upstream. Na atualização completa, alinha dependências aos requisitos Python das versões instaladas de pangolin/Snakemake e exige `pip check`; a atualização somente dos dados não faz essa instalação de dependências das ferramentas. Usa o interpretador Python ativo e diretório explícito para baixar/construir containers; interrompe a instalação se alguma etapa falhar. Seleciona Nextflow 23.10.1 por padrão, permite `NXF_VER` e propaga falha da pipeline ao chamador, inclusive à GUI. O parser de parâmetros é preservado. |
-| `vfnext/nextflow.config` | Alterado | Declara Nextflow >=23.10.1 como versão mínima validada nesta migração para o backend Apptainer. |
-| `vfnext/configs/containers.config` | Alterado | Troca o backend Singularity por Apptainer. Remove `--writable` global, incompatível com as imagens SIF. Restringe a escrita temporária a `runSnpEff` com `--writable-tmpfs`; os sandboxes permanecem em diretórios e sua manutenção persistente continua usando `--writable`. Define `XDG_CACHE_HOME` como `${task.workDir}/.cache` somente para `runPangolin`, permitindo criar o cache do Snakemake sem escrever no HOME ou no sandbox. Nomes e versões de imagens são preservados. |
-| `vfnext/configs/profiles.config` | Alterado | Migra os dois perfis Fiocruz para Apptainer e remove o caminho Singularity sem uso. Preserva executores, recursos, filas e binds. Configuração PBS foi inspecionada, sem execução em cluster. |
-| `vfnext/containers/spython_functions.py` | Alterado | Remove import spython não utilizado. Usa `apptainer pull` com a biblioteca Sylabs explícita, diretório de destino e verificação do código de saída. Corrige a condição do laço para que downloads ausentes não causem repetição infinita. Mantém o nome do arquivo para evitar alterar seus importadores. |
-| `vfnext/containers/build_containers.py` | Alterado | Troca construção/execução por Apptainer, preservando `--fakeroot --sandbox` para pangolin e snpEff. Verifica `unsquashfs` pelo `PATH`, sem exigir link em `/usr/local/bin`. Retorna falha se construção ou etapas auxiliares falharem, permitindo ao instalador detectar instalação incompleta. |
-| `vfnext/containers/add_entries_SnpeffDB.sh` | Alterado | Substitui Singularity por Apptainer. Preserva fakeroot, sandbox gravável e `snpEff build -genbank`. Adiciona interrupção em falhas, argumentos/caminhos entre aspas e download temporário em formato `gbwithparts`, necessário para registros de montagem que omitem a sequência em `gb`. Exige sequência antes de alterar o banco, evita duplicar a entrada na configuração, verifica o arquivo binário produzido e publica o catálogo somente após sucesso. Usa `printf` para preservar nomes literalmente. |
-| `vfnext/containers/def_files/amd64/Singularity_pangolin` | Alterado | Adota `Bootstrap: docker` e `debian:12-slim`, como na `develop-SIF3-MAC`, após falha real de pacotes na base Debian 11. Este bootstrap usa o Apptainer, sem Docker Engine. Preserva a chamada de instalação Conda e as versões pangolin 4.4, UShER 0.6.2 e Snakemake 9.19.0. Adiciona `set -e`, alinhamento posterior das dependências aos requisitos declarados pelos pacotes Python instalados e `pip check`: os metadados Bioconda atualmente divergem desses requisitos. |
-| `vfnext/containers/def_files/amd64/Singularity_snpEff` | Alterado | Traz a correção dos repositórios Debian Buster para `archive.debian.org` da `develop-SIF3-MAC` e adiciona `set -e`. Ajusta somente a validade temporal do arquivo APT dentro do container arquivado; não altera configurações do host. Preserva base, dependências e snpEff 5.0. |
-| `README.md` | Alterado | Acrescenta links para instalação Ubuntu 26.04 e este registro. |
-| `docs/installation.md` | Alterado | Acrescenta instalação Ubuntu 26.04 com Apptainer, opções do instalador, versões do runtime, distinção entre sandbox/SIF e limites da validação. Identifica as instruções manuais anteriores como históricas. |
-| `docs-pt/installation.md` | Alterado | Documenta a mesma instalação e opções em português. |
-| `docs-es/installation.md` | Alterado | Documenta a mesma instalação e opções em espanhol. |
-| `tests/install-script.test.sh` | Inserido, executável | Valida simulação AMD64/ARM64 sem mutações, instalação/reinstalação com comandos simulados, caminhos com espaços, ausência de sudo/downloads nas opções de reutilização e rejeição de opção inválida. Adaptado do teste do instalador da branch de referência. |
-| `tests/test_runtime.py` | Inserido | Nove testes para falhas de download/pipeline/manutenção, biblioteca Sylabs explícita e término do laço de downloads. Cobrem argumentos com espaços, limpeza das restrições temporárias de build, separação da atualização somente de dados e propagação de falhas da instalação/verificação de dependências. Simulam download snpEff vazio, construção com erro e ausência do binário final; nesses casos o catálogo anterior permanece intacto. Não executam análises biológicas. |
-| `tests/host-smoke.sh` | Inserido, executável | Gera uma referência aleatória não biológica e leituras sintéticas pareadas/simples. Executa a pipeline sem alterações em modo `custom`, com os limiares científicos padrão, e verifica consensos e diretório de resultados compilados. |
-| `tests/pangolin-cache-smoke.sh` | Inserido, executável | Executa duas tarefas Nextflow usando a configuração real de `runPangolin` e um sandbox selecionado. Inicializa os caches de fontes/runtime do Snakemake e verifica escrita e isolamento entre tarefas. Não chama pangolin nem usa sequências; aceita diretório de validação com espaços e exige diretório novo. |
-| `UBUNTU26.04-CHANGES.md` | Inserido | Este registro por arquivo, decisões, comandos de reprodução, evidências e limites. |
+## Diferenças por arquivo
 
-Nenhum arquivo de código versionado foi removido ou renomeado.
+### `README.md` — modificado
 
-## Problemas observados e soluções
+Acrescenta um link para a seção de instalação em Ubuntu 26.04 com Apptainer
+e para este documento. O restante do README é preservado.
 
-- O launcher Nextflow compacto inicialmente falhou ao resolver dependências
-  Maven. O usuário informou que havia um mirror corporativo em `settings.xml`
-  e renomeou esse arquivo. Após essa mudança, o launcher oficial compacto
-  23.10.1 iniciou com sucesso usando um cache Nextflow novo. O instalador
-  passou a usar esse launcher, retirando a exigência da distribuição `all`.
-- Uma instalação Apptainer não deve depender de um remote Sylabs previamente
-  configurado. As chamadas de download usam `--library https://library.sylabs.io`,
-  sem modificar o remote padrão do usuário.
-- A receita pangolin Debian 11 falhou com HTTP 404 em pacotes APT. A base Debian
-  12 da branch de referência resolveu a construção sem importar outras mudanças.
-- A atualização real de constellations falhou na construção do pacote: seu
-  instalador usa `pkg_resources`, ausente no setuptools atual. As duas rotinas
-  pangolin fornecem `setuptools<81` via `PIP_BUILD_CONSTRAINT`, em arquivo
-  temporário montado em `/tmp`; a restrição afeta o build, não as dependências
-  científicas instaladas. O pip 26.2.1 do sandbox reconhece essa opção.
-- `pip check` revelou conflitos pré-existentes no sandbox pangolin: pandas
-  3.0.6, scikit-learn 1.2.2 e packaging 26.3 não atendiam aos requisitos Python
-  de pangolin 4.4/Snakemake 9.19.0. O alinhamento pelos requisitos dos pacotes
-  instalados resultou em pandas 2.3.3, scikit-learn 1.7.1 e packaging 25.0;
-  também foi selecionado snakemake-interface-common 1.23.0 pelo resolver.
-  Aplicado na construção e na atualização completa, preservando as versões
-  das ferramentas. A tentativa de impor os requisitos diretamente no Conda
-  falhou porque seu pangolin 4.4 exige scikit-learn `<1.3`, enquanto os
-  metadados Python instalados exigem `==1.7.1`.
-- O teste snpEff com cromossomo I de *Saccharomyces cerevisiae* (`NC_001133.9`)
-  recebeu um registro `CONTIG` sem sequência com `-format gb`. `gbwithparts`
-  resolveu o download completo. O script e o wrapper antes ocultavam a falha
-  da construção; agora interrompem e retornam erro, preservando o catálogo.
-  As correções de argumentos e interrupção em falhas foram comparadas com a
-  `develop-SIF3-MAC`, sem importar seus overlays.
-- A receita snpEff apontava para repositórios Buster removidos dos espelhos.
-  A correção para o arquivo Debian resolveu a instalação de `procps`.
-- Os wrappers anteriores podiam retornar sucesso após uma falha de execução.
-  Agora o erro interrompe a instalação e chega ao processo que chamou ViralFlow.
+### `UBUNTU26.04-CHANGES.md` — adicionado
 
-## Validação no host
+Documenta o estado atual da branch e suas diferenças por arquivo em relação
+a `WallauBioinfo/develop`.
 
-Host: Ubuntu 26.04.1 LTS, AMD64. Apptainer 1.5.3 já instalado.
-Ambiente novo e isolado em `.venv/ubuntu26.04`, ignorado pelo Git:
-Micromamba 2.9.0, Python 3.14, Java 17, Nextflow 23.10.1, ViralFlow 1.4.0.
-Os ambientes internos das imagens permanecem independentes desse Java/Python.
+### `docs/installation.md` — modificado
 
-| Verificação | Resultado |
-| --- | --- |
-| Launcher compacto com cache novo após renomeação do settings.xml | Sucesso; Nextflow 23.10.1 inicializado sem a distribuição `all`. |
-| Instalação inicial do ambiente e reinstalação | Sucesso; wrapper e Nextflow executáveis; ambiente existente atualizado. |
-| Construção dos sandboxes AMD64 | Sucesso; pangolin 4.4 e snpEff 5.0e executam comandos de versão. |
-| Download das 11 imagens originais SIF | Sucesso usando Apptainer e biblioteca Sylabs explícita. |
-| Instalador completo com containers existentes | Sucesso; dataset auxiliar Nextclade e catálogo snpEff gerados pela rotina existente. |
-| Pipeline com entrada sintética pareada e simples | 27 tarefas concluídas, zero falhas; duração Nextflow 1m16s; consensos e resultados compilados produzidos. |
-| Retomada da mesma execução | 27 tarefas recuperadas do cache, zero falhas; duração Nextflow 2,7s. |
-| Reinstalação e retomada com launcher compacto | Instalador concluído; 27 tarefas recuperadas do cache, zero falhas; duração Nextflow 2,3s. |
-| Sandboxes lançados pelo Nextflow com configuração real | Três tarefas de comandos de versão concluídas: pangolin, Python do snpEff e snpEff. `--writable-tmpfs` aparece somente na tarefa `runSnpEff`. |
-| Escrita temporária no snpEff | Sucesso; arquivo de sondagem não persistiu no sandbox. |
-| Manutenção gravável pangolin | `apptainer exec --writable ... pangolin --version` executado com sucesso, sem atualizar pacotes/dados. |
-| Entrada inválida pelo comando ViralFlow | Código de saída 1 propagado ao chamador; nenhuma tarefa científica iniciada. |
-| Testes do instalador e testes Python | Sucesso; nove testes Python e teste shell. |
-| Configuração padrão e PBS | Carregam com `apptainer.enabled = true`; configuração PBS não submetida a cluster. |
-| Revisão do diff | Nenhuma diferença em módulos, workflows, `main.nf` ou scripts científicos em relação à base local. |
+Acrescenta uma seção em inglês para Ubuntu 26.04 com Apptainer. Documenta
+Micromamba 1.5.7, Nextflow 22.04.0, Java 17, o comando de compatibilidade
+`singularity`, os sandboxes e a instalação direta ou pela GUI. Explica os
+caminhos próprios da GUI, a criação/atualização do ambiente e a seleção do
+launcher Nextflow em `bin`. As instruções preexistentes são preservadas.
 
-Os testes não comprovam desempenho científico, classificação de linhagens ou
-anotação de amostras reais. A pipeline sintética utiliza `runSnpEff false` e modo
-`custom`; os sandboxes foram testados separadamente quanto ao ambiente e ao
-lançamento pelo Nextflow. ARM64, instalação do PPA em uma máquina sem Apptainer,
-cluster PBS e interface gráfica não foram executados nesta validação.
+### `docs-pt/installation.md` — modificado
 
-### Manutenção pangolin e banco personalizado snpEff
+Acrescenta a mesma orientação de instalação e execução em português,
+preservando as instruções preexistentes.
 
-As operações foram exercitadas pelo CLI real, redirecionando somente sua raiz
-de instalação para cópias dos sandboxes. Versões antigas dos dados e do scorpio
-foram instaladas nessas cópias para testar downloads e gravações reais.
+### `docs-es/installation.md` — modificado
 
-| Operação | Resultado |
-| --- | --- |
-| Atualização somente dos dados | pangolin-data 1.40 → 1.41 e constellations 0.1.10 → 0.1.12; código de saída 0. Pangolin 4.4 e scorpio 0.3.19 preservados. |
-| Inventário antes/depois da atualização de dados | Somente os dois pacotes de dados mudaram de versão; demais pacotes preservados. `pip check` sem conflitos antes e depois. |
-| Atualização de ferramentas e dados | pangolin-data 1.40 → 1.41, constellations 0.1.10 → 0.1.12 e scorpio 0.3.17 → 0.3.19; código de saída 0. Pangolin já estava na versão estável mais recente, 4.4. |
-| Alinhamento e verificação de dependências | Atualização completa executada na cópia e no sandbox instalado; `pip check` sem conflitos em ambos. |
-| Reconstrução pangolin com a receita corrigida | Sucesso; sandbox novo com pangolin 4.4, dados 1.41, constellations 0.1.12 e scorpio 0.3.19; `pip check` sem conflitos. |
-| Inclusão snpEff em caminho/nome com espaços | Banco `NC_001133.9` construído; binário não vazio; catálogo indica `OK` e nome `Saccharomyces cerevisiae`. |
-| Repetição da inclusão snpEff | Sucesso; uma única entrada `.genome` na configuração. |
-| Carregamento do banco personalizado | snpEff com `-noDownload` anotou um VCF de teste de levedura e produziu `ANN`; banco carregado do sandbox com `--writable-tmpfs`. |
-| Pipeline completa após os ajustes de manutenção | Launcher compacto; diretório novo e entradas aleatórias não biológicas; 27 tarefas executadas com sucesso, zero falhas, duração 1m14s. |
+Acrescenta a mesma orientação de instalação e execução em espanhol,
+preservando as instruções preexistentes.
 
-Uma tentativa exploratória de usar pangolin 4.3.1 como versão antiga de teste
-encontrou incompatibilidade com setuptools e Snakemake 9.19.0. Essa preparação
-foi descartada: o teste final usa pangolin 4.4 da receita desta branch e scorpio
-anterior. Não se afirma compatibilidade com ambientes de versões principais
-antigas; a documentação upstream exige ajuste do ambiente nessas migrações.
-Nenhuma classificação de linhagem ou análise de amostra patogênica foi feita.
+### `envs/amd64.yml` — modificado
 
-## Reprodução
+Remove `singularityce=3.11.4` e `spython=0.3.1`: Apptainer é fornecido pelo
+host e a construção/download dos containers utiliza seu CLI diretamente.
+Mantém `nextflow=22.04.0`, `openjdk=17` e as demais dependências do upstream.
 
-```bash
-bash install.sh --repo-dir "$PWD" --no-update --skip-system-packages \
-  --no-path-update --install-root "$PWD/.venv/ubuntu26.04" \
-  --bin-dir "$PWD/.venv/ubuntu26.04/bin"
+Reduz os canais a `bioconda` e `conda-forge`, retirando
+`bioconda/label/cf201901`, `conda-forge/label/cf201901`,
+`conda-forge/label/main`, `pkgs/main` e `wallaulab`. A lista reduzida evita
+consultas a canais antigos, duplicados ou desnecessários para esse ambiente.
+A consulta ao índice `noarch` do canal `pkgs/main`, conforme resolvido em
+`conda.anaconda.org`, retornou HTTP 404; isso não significa que todos os
+canais retirados estejam indisponíveis.
 
-bash tests/install-script.test.sh
-python3 -m unittest discover -s tests -p 'test_runtime.py' -v
+### `envs/arm64.yml` — modificado
 
-VIRALFLOW_COMMAND="$PWD/.venv/ubuntu26.04/bin/viralflow" \
-  bash tests/host-smoke.sh /tmp/viralflow-host-validation-nova
-```
+Remove somente a dependência `spython`, substituída pelas chamadas diretas
+ao CLI Apptainer. Preserva os canais, Nextflow 22.04.0, Java 17 e as demais
+dependências do upstream.
 
-O teste de host exige um diretório novo para preservar as evidências de
-execuções anteriores. O instalador exige mapeamentos fakeroot já configurados
-quando `--skip-system-packages` é utilizado para construir sandboxes.
+### `tests/host-smoke.sh` — adicionado
 
-Comandos de manutenção, usando a instalação selecionada acima:
+Inclui um teste de execução da pipeline em modo `custom`, com referência
+aleatória não biológica e leituras sintéticas pareadas e simples. Verifica
+a criação dos consensos e do diretório de resultados compilados. Permite
+selecionar o comando ViralFlow e o diretório de validação, preservando o
+código e os limiares científicos da pipeline.
 
-```bash
-.venv/ubuntu26.04/bin/viralflow update-pangolin-data
-.venv/ubuntu26.04/bin/viralflow update-pangolin
-.venv/ubuntu26.04/bin/viralflow add-entry-to-snpeff \
-  --org-name 'Saccharomyces cerevisiae' --genome-code NC_001133.9 --arch amd64
-```
+### `tests/pangolin-cache-smoke.sh` — adicionado
 
-Esses comandos operam no sandbox instalado. Nesta validação, a inclusão de
-levedura foi feita somente na cópia de teste; a atualização completa também
-foi aplicada ao sandbox pangolin instalado para corrigir suas dependências.
+Executa duas tarefas mínimas Nextflow usando a configuração real de
+`runPangolin` e um sandbox selecionado. Inicializa os caches de fontes e de
+runtime do Snakemake e verifica escrita e isolamento entre tarefas. Não
+executa a classificação Pangolin nem utiliza sequências biológicas.
 
-## Artefatos locais de instalação e execução
+### `tests/test_runtime.py` — adicionado
 
-Estes artefatos são ignorados pelo Git e não integram o código da migração:
+Inclui testes para propagação de falhas de execução/download/manutenção,
+seleção explícita do Nextflow e isolamento entre instalações, argumentos
+com espaços, limpeza dos arquivos temporários, distinção entre os modos de
+atualização Pangolin, preservação do catálogo snpEff diante de falhas,
+seleção explícita da biblioteca de containers e término das tentativas de
+download. Os testes usam mocks e executáveis simulados.
 
-- `.venv/ubuntu26.04/bin/`: comandos `micromamba`, `nextflow` e `viralflow`.
-- `.venv/ubuntu26.04/micromamba/`, `nextflow/` e `apptainer-cache/`: dependências
-  e caches da instalação isolada.
-- `vfnext/containers/*.sif`: 11 arquivos SIF e os dois diretórios sandbox.
-- `vfnext/containers/snpEff_DB.catalog` e
-  `vfnext/containers/nextclade_dataset/sars-cov-2/`: artefatos auxiliares da
-  rotina de instalação original.
-- `.venv/ubuntu26.04/validation/installation-logs/`: logs de instalação,
-  download e construção copiados do diretório temporário de trabalho.
-- `.venv/ubuntu26.04/validation/synthetic/`: referência, GFF, FASTQ e parâmetros
-  sintéticos; `pipeline.log`, `resume.log`, `resume-compact.log`, logs Nextflow,
-  cache, work e output.
-- `.venv/ubuntu26.04/validation/sandbox-runtime/`: workflow de comandos de versão,
-  link para containers, log, trace e work de três tarefas.
-- `.venv/ubuntu26.04/validation/maven-default/`: launcher compacto, cache novo
-  e log da inicialização após a renomeação do `settings.xml`.
-- `.venv/ubuntu26.04/validation/maintenance/`: cópias dos sandboxes, scripts
-  locais que redirecionam a raiz do CLI e logs das tentativas e dos testes
-  finais. `data-consistent-final.log`, `data-package-changes.json` e
-  `data-packages-before.json`/`data-packages-final.json` comprovam a atualização
-  somente dos dados. `tool-final.log` e `tool-dependencies-corrected.log`
-  registram atualização das ferramentas/dados e alinhamento de dependências;
-  `original-dependencies-corrected.log` registra a correção no sandbox instalado.
-  `*-pip-check-final.log` e `*-verified.txt` registram as verificações finais.
-  `pangolin-rebuild-corrected.log` e `pangolin-rebuilt-corrected.sif/` são a
-  reconstrução validada. `snpeff-spaces.log`, `snpeff-repeat.log` e
-  `snpeff with spaces/annotated.vcf` comprovam inclusão, repetição e carregamento
-  do banco de levedura. `unit-tests.log` registra os nove testes Python.
-- `.venv/ubuntu26.04/validation/synthetic-after-maintenance/`: execução completa
-  com launcher compacto após os ajustes; `pipeline.log`, `.nextflow.log` e
-  outputs registram 27 tarefas executadas, nenhuma recuperada do cache.
-- `.venv/ubuntu26.04/validation/nextflow-*.config`: configuração resolvida para
-  conferência dos backends padrão/PBS.
-- `.venv/ubuntu26.04/validation/failure/`: parâmetros deliberadamente inválidos
-  e log da verificação de código de saída. Consultas de configuração e esta
-  verificação também registraram logs/cache Nextflow no diretório do checkout.
+### `vfnext/bin/compileOutput.py` — modificado
 
-Não foram modificados pacotes do sistema, arquivos de inicialização do shell,
-configuração global do Apptainer ou restrições AppArmor do host. Alterações
-de código permanecem no checkout para revisão, sem publicação remota.
+Acrescenta quatro gráficos SVG aos resultados compilados:
 
-## Correção do cache do Snakemake na execução pela GUI
+- Contagem de leituras por amostra.
+- Relação entre abrangência e profundidade média de cobertura.
+- Distribuição da abrangência de cobertura por faixas de classificação.
+- Distribuição da abrangência de cobertura por decis.
 
-Em 09/10/2026, a execução pela GUI instalada falhou em `runPangolin` com
-`OSError: [Errno 30] Read-only file system: '/home/cdotto/.cache'`.
-O Nextflow usa `env -` e `apptainer exec --no-home`: o diretório HOME do
-usuário não está montado para escrita. O Snakemake 9.19.0 tenta criar nele
-seu cache de fontes antes de executar o workflow.
+Inclui funções auxiliares para escala dos eixos, regressão da visualização,
+conversão de proporções para porcentagens, escape do texto SVG e destaque dos
+controles negativos. Os gráficos utilizam os dados das tabelas de resultados
+e são gerados durante sua compilação. Essa diferença deve ser considerada na
+comparação completa da branch, além das adaptações do ambiente de execução.
 
-A correção de produção acrescenta somente uma linha em
-`vfnext/configs/containers.config`: o argumento Apptainer `--env` define
-`XDG_CACHE_HOME` no diretório gravável de cada tarefa. O sandbox pangolin
-continua em diretório, montado para leitura. Não foram alterados comandos
-pangolin, algoritmos, módulos, workflows, versões ou dados das ferramentas.
-O teste inserido e este documento completam os três arquivos desta correção;
-nenhum arquivo foi removido.
+### `vfnext/configs/containers.config` — modificado
 
-Validação realizada com Nextflow 23.10.1 e Apptainer 1.5.3:
+Mantém o backend `singularity`, habilitado com montagem automática, como no
+upstream. Remove a seleção global de escrita por arquitetura: `--writable`
+para AMD64 e `--writable-tmpfs` para ARM64. A escrita temporária passa a ser
+restrita ao processo `runSnpEff`, evitando aplicar opções de escrita a todas
+as imagens SIF.
 
-- Reprodução da falha original no sandbox instalado, inicializando apenas
-  `snakemake.sourcecache.SourceCache`: mesmo erro de filesystem somente leitura.
-- Teste pelo Nextflow com o sandbox do checkout: duas tarefas concluídas,
-  código 0, caches de fontes/runtime graváveis e separados por tarefa.
-- Mesmo teste com o sandbox de `~/ViralFlowGUI/ViralFlow`, em um diretório
-  com espaços: duas tarefas concluídas, código 0.
-- Configuração instalada atualizada com a mesma linha após os testes;
-  conteúdo conferido como idêntico ao arquivo deste checkout. Essa alteração
-  local também está em `~/ViralFlowGUI/ViralFlow/vfnext/configs/containers.config`;
-  sua versão anterior foi preservada no diretório de evidências abaixo.
+Define `XDG_CACHE_HOME` no diretório de trabalho de cada tarefa `runPangolin`,
+permitindo ao Snakemake criar seus caches em uma pasta gravável e independente
+por tarefa. Preserva os nomes e caminhos dos containers atribuídos aos
+processos.
 
-A análise que falhou na GUI não foi reexecutada nesta validação. Os testes
-verificam o problema de cache e a configuração do ambiente de execução.
-Não foi necessária nova alteração no código da GUI nem reconstrução dos
-containers ou do pacote `.deb` para esta correção.
+### `vfnext/containers/add_entries_SnpeffDB.sh` — modificado
 
-Evidências locais, ignoradas pelo Git, em
-`.venv/ubuntu26.04/validation/pangolin-cache/`: `before.log`,
-`installed-containers.config.before`, `development-final/` e
-`installed sandbox/`. Cada teste concluído contém `pipeline.log`,
-`trace.txt`, comandos gerados pelo Nextflow e `cache-probe.json` por tarefa.
+Substitui as chamadas Singularity por Apptainer e acrescenta interrupção em
+caso de erro, validação dos argumentos e tratamento de caminhos/nomes com
+espaços. Obtém o registro GenBank completo em um diretório temporário e
+verifica a presença de sequência antes de alterar a configuração do sandbox.
 
-Reprodução do teste com o ambiente e as dependências já instalados:
+Evita duplicar uma entrada já existente na configuração, mantém a construção
+do banco pelo snpEff e verifica a existência do arquivo de banco gerado.
+Produz o catálogo em arquivo temporário e o publica após a execução
+bem-sucedida, com limpeza dos arquivos temporários ao encerrar.
+
+### `vfnext/containers/build_containers.py` — modificado
+
+Utiliza Apptainer na construção dos sandboxes Pangolin/snpEff e na execução
+das etapas de preparação dos containers. Preserva as opções de construção
+sandbox e fakeroot e as versões declaradas das ferramentas.
+
+Verifica `unsquashfs` pelo `PATH`, em vez de exigir sua presença em
+`/usr/local/bin/unsquashfs`, e devolve código de saída diferente de zero quando
+alguma etapa falha. Isso permite à GUI reconhecer a falha do build.
+
+### `vfnext/containers/def_files/amd64/Singularity_pangolin` — modificado
+
+Troca a base Debian 11 obtida pela biblioteca pela base `debian:12-slim`
+obtida via transporte Docker do Apptainer, corrigindo a construção diante dos
+problemas de disponibilidade dos pacotes da base anterior. Esse transporte
+não exige Docker Engine para executar a pipeline.
+
+Acrescenta interrupção em caso de erro e instalação/verificação das dependências
+Python declaradas por Pangolin e Snakemake, para conciliar essas dependências
+com os pacotes Conda. Preserva as versões explícitas de Python, Pangolin,
+Snakemake e Usher presentes no upstream e o Micromamba próprio do container.
+
+### `vfnext/containers/def_files/amd64/Singularity_snpEff` — modificado
+
+Preserva a imagem base e as versões das ferramentas. Redireciona os repositórios
+APT da distribuição antiga para `archive.debian.org` e ajusta a verificação de
+validade dos índices arquivados, permitindo instalar os pacotes necessários.
+Acrescenta interrupção em caso de erro na preparação do container.
+
+### `vfnext/containers/spython_functions.py` — modificado
+
+Remove o import de `spython` e realiza downloads pelo CLI Apptainer, informando
+explicitamente a biblioteca Sylabs. O download usa o diretório de containers
+selecionado e propaga falhas, sem depender do remote padrão do usuário.
+
+Corrige a condição do laço de tentativas, tenta somente os containers ainda
+ausentes e informa erro se faltarem imagens ao final das tentativas.
+
+### `wrapper/__init__.py` — modificado
+
+Remove imports não utilizados, incluindo `distutils`, ausente nas versões
+atuais do Python. Executa construção e manutenção por subprocessos com
+propagação de falhas e preservação dos argumentos/caminhos com espaços.
+A construção utiliza o mesmo interpretador Python que executa o wrapper.
+
+As operações de atualização Pangolin passam a usar Apptainer, um diretório
+temporário montado em `/tmp` e uma restrição de ferramentas de build
+`setuptools<81`, necessária a pacotes que ainda utilizam `pkg_resources`.
+A atualização completa também instala e verifica as dependências Python
+declaradas por Pangolin e Snakemake. A atualização somente de dados conserva
+sua operação própria.
+
+Mantém Nextflow 22.04.0 como padrão, permitindo selecionar a versão por
+`NXF_VER`. Aceita `VIRALFLOW_NEXTFLOW` como caminho absoluto para o executável
+escolhido pela GUI, valida esse caminho e aplica quoting ao comando. Sem essa
+variável, utiliza Nextflow pelo `PATH`, como na chamada CLI tradicional.
+Propaga o código de falha do Nextflow. O parser dos parâmetros e a opção
+`-resume` permanecem iguais ao upstream.
+
+## Arquivos e comportamentos preservados
+
+`vfnext/nextflow.config` e `vfnext/configs/profiles.config` são idênticos a
+`WallauBioinfo/develop`. Não existe diferença de versão Nextflow nos YAMLs:
+ambos mantêm 22.04.0, assim como o padrão do wrapper. Java permanece em 17.
+Micromamba 1.5.7 é selecionado pela GUI; esta branch não possui um instalador
+que fixe sua versão.
+
+`install.sh` e `tests/install-script.test.sh` estão ausentes tanto nesta branch
+quanto no upstream. Portanto, não aparecem como arquivos removidos nessa
+comparação. A instalação é feita pela GUI ou pelas instruções manuais.
+
+O fluxo principal, os módulos, os workflows, os parâmetros científicos padrão
+e os dados de teste versionados permanecem iguais à referência. As diferenças
+dos scripts de análise estão concentradas nos gráficos adicionais de
+`compileOutput.py`. As definições de containers ARM64 também são preservadas.
+A construção continua sem opção de limpeza prévia de containers.
+
+## Validação disponível
+
+A instalação inicial, a reinstalação e o uso de Micromamba 1.5.7 sobre um
+ambiente criado com 2.9.0 foram verificados em diretórios isolados. Nextflow
+22.04.0 carregou a configuração principal e os perfis Fiocruz e executou
+tarefas mínimas de infraestrutura em SIF e nos sandboxes existentes. A escrita
+e o isolamento dos caches reais do Snakemake também foram verificados.
+Os 12 testes Python passaram.
+
+Essas verificações foram realizadas em Ubuntu 26.04.1 AMD64 com Apptainer
+1.5.4 e Java 17. A validação do downgrade cobre instalação e infraestrutura;
+não equivale à execução completa da pipeline científica. ARM64, PBS,
+Ubuntu 20.04 e WSL não foram executados nessa validação. O script
+`tests/host-smoke.sh` consta na branch, mas não foi executado nessa etapa.
+
+A documentação da GUI, que pertence a outro repositório, está em
+[UBUNTU26.04-COMPATIBILITY.md](https://github.com/camilodotto/ViralFlowGui/blob/v0.53/UBUNTU26.04-COMPATIBILITY.md).
+
+Para reproduzir a comparação dos arquivos versionados com o conteúdo atual
+do diretório de trabalho:
 
 ```bash
-XDG_CACHE_HOME="$PWD/.venv/ubuntu26.04/cache" \
-MAMBA_ROOT_PREFIX="$PWD/.venv/ubuntu26.04/micromamba" \
-NXF_HOME="$PWD/.venv/ubuntu26.04/nextflow" NXF_VER=23.10.1 \
-NEXTFLOW_COMMAND="$PWD/.venv/ubuntu26.04/bin/nextflow" \
-  .venv/ubuntu26.04/bin/micromamba run -n viralflow \
-  bash tests/pangolin-cache-smoke.sh \
-  "$PWD/vfnext/containers/pangolin:4.4.sif" /tmp/viralflow-cache-validation-nova
+git diff --name-status WallauBioinfo/develop --
+git diff WallauBioinfo/develop --
 ```
-
-O `XDG_CACHE_HOME` externo deste comando isola o cache do Micromamba para o
-teste; o cache dentro do container é definido pela configuração de produção.
-A opção de ambiente está documentada em
-[Apptainer: environment and metadata](https://apptainer.org/docs/user/latest/environment_and_metadata.html).
-
-## Seleção explícita do Nextflow instalado pela GUI — 10/10/2026
-
-A GUI agora seleciona exclusivamente os binários em sua pasta `bin`
-configurada, por padrão `~/ViralFlowGUI/bin`, e informa ao ViralFlow o
-caminho completo do Nextflow através de `VIRALFLOW_NEXTFLOW`.
-
-| Arquivo alterado nesta etapa | Alteração |
-| --- | --- |
-| `wrapper/__init__.py` | Aceita `VIRALFLOW_NEXTFLOW` como caminho absoluto de um executável existente. Um caminho explícito inválido interrompe a execução, sem procurar outro Nextflow no PATH. Aplica quoting ao executável, versão e caminho de `main.nf`; preserva o parser de parâmetros, argumentos científicos e propagação de falhas. Sem a variável, mantém a chamada CLI tradicional pelo PATH. |
-| `install.sh` | O launcher gerado também informa o Nextflow da pasta de binários escolhida, mantendo a chamada independente de outras instalações. Versões e demais opções do instalador permanecem inalteradas. |
-| `tests/test_runtime.py` | Três regressões adicionais: duas instalações com caminhos contendo espaços/apóstrofo e outro Nextflow no PATH; rejeição de caminho explícito ausente/relativo; preservação do CLI sem seleção explícita. Total atual: 12 testes. |
-| `UBUNTU26.04-CHANGES.md` | Este registro por arquivo, evidências e limites. |
-
-Nenhum arquivo foi inserido/removido nesta etapa de código. Os módulos,
-workflows, parâmetros, comandos científicos e containers permanecem iguais.
-Os ajustes da GUI estão registrados em
-[ViralFlowGui/UBUNTU26.04-COMPATIBILITY.md](../ViralFlowGui/UBUNTU26.04-COMPATIBILITY.md).
-
-Os 12 testes Python e os testes shell do instalador passaram. O wrapper
-também executou no host duas tarefas Nextflow reais de escrita de marcador,
-usando os binários 23.10.1 baixados pelos instaladores da GUI e caches
-independentes. Binários externos deliberados no PATH não foram utilizados.
-As evidências estão em `.venv/ubuntu26.04/validation/gui-bin/report.json` e
-nas pastas `installation-A/` e `installation-B/`. Foram reutilizados Java 17
-e Python do ambiente local de validação, sem análise biológica.
-
-O teste inicial com espaços no caminho do cache mostrou uma limitação do
-classpath do launcher Nextflow 23.10.1. O teste final usa cache/framework sem
-espaços, como na configuração padrão da GUI, e não modifica o launcher
-upstream. As instalações reais do usuário, pacotes GUI e branches remotas
-não foram alterados por esta validação.
-
-## Referências de compatibilidade
-
-- [Backend Apptainer no Nextflow](https://docs.seqera.io/nextflow/reference/config/apptainer).
-- [Distribuição oficial Nextflow 23.10.1](https://github.com/nextflow-io/nextflow/releases/tag/v23.10.1).
-- [Remotes e bibliotecas Apptainer](https://apptainer.org/docs/user/latest/endpoint.html).
-- [Instalação Micromamba](https://mamba.readthedocs.io/en/latest/installation/micromamba-installation.html).
-- [Atualização pangolin](https://cov-lineages.org/resources/pangolin/updating.html).
-- [Restrições de build no pip](https://pip.pypa.io/en/stable/user_guide/#build-constraints).
-- [NCBI EFetch e GenBank com sequência completa](https://www.ncbi.nlm.nih.gov/sites/books/NBK1058/).

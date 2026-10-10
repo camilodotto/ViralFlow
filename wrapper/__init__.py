@@ -143,7 +143,7 @@ def update_pangolin_data(root_path):
 def run_vfnext(root_path, params_fl):
     # get nextflow arguments
     args_str = parse_params(params_fl)
-    nxtflw_ver = os.environ.get("NXF_VER", "23.10.1")
+    nxtflw_ver = os.environ.get("NXF_VER", "22.04.0")
     configured_nextflow = os.environ.get("VIRALFLOW_NEXTFLOW")
     nextflow = configured_nextflow or "nextflow"
     if configured_nextflow and (

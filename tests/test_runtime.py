@@ -50,12 +50,12 @@ class RuntimeTests(unittest.TestCase):
                 binary.chmod(0o755)
                 log = root / "invocation.txt"
                 with patch.dict(os.environ, {
-                        "VIRALFLOW_NEXTFLOW": str(binary), "NXF_VER": "23.10.1",
+                        "VIRALFLOW_NEXTFLOW": str(binary), "NXF_VER": "22.04.0",
                         "TEST_NEXTFLOW_LOG": str(log), "PATH": f"{external}:{os.environ['PATH']}"}), \
                         patch.object(wrapper, "parse_params", return_value="-resume"):
                     wrapper.run_vfnext(str(root), "unused.params")
                 self.assertEqual(log.read_text().splitlines(), [
-                    str(binary), "23.10.1", "run", str(root / "vfnext/main.nf"), "-resume"])
+                    str(binary), "22.04.0", "run", str(root / "vfnext/main.nf"), "-resume"])
             self.assertFalse(marker.exists())
 
     def test_invalid_selected_nextflow_cannot_fall_back_to_path(self):
@@ -69,11 +69,11 @@ class RuntimeTests(unittest.TestCase):
                 run.assert_not_called()
 
     def test_cli_without_selected_nextflow_keeps_path_behavior(self):
-        with patch.dict(os.environ, {"VIRALFLOW_NEXTFLOW": "", "NXF_VER": "23.10.1"}), \
+        with patch.dict(os.environ, {"VIRALFLOW_NEXTFLOW": "", "NXF_VER": "22.04.0"}), \
                 patch.object(wrapper, "parse_params", return_value="-resume"), \
                 patch.object(wrapper.subprocess, "call", return_value=0) as run:
             wrapper.run_vfnext("/cli", "unused.params")
-        self.assertEqual(run.call_args.args[0], "NXF_VER=23.10.1 nextflow run /cli/vfnext/main.nf -resume")
+        self.assertEqual(run.call_args.args[0], "NXF_VER=22.04.0 nextflow run /cli/vfnext/main.nf -resume")
 
     def test_pangolin_update_failure_is_reported_and_temporary_files_removed(self):
         for update, option in ((wrapper.update_pangolin, "--update"),
