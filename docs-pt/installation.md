@@ -1,5 +1,47 @@
 # Instalação
 
+## Ubuntu 26.04 com Apptainer
+
+Nesta branch a execução usa Apptainer diretamente no host Ubuntu. O instalador
+foi adaptado da `develop-SIF3-MAC`, mantendo o caminho de instalação Linux:
+
+```bash
+git clone -b feat/develop/ubuntu26.04 https://github.com/camilodotto/ViralFlow.git
+cd ViralFlow
+bash install.sh --repo-dir "$PWD"
+export PATH="$HOME/.local/bin:$PATH"
+viralflow --version
+```
+
+O instalador cria o ambiente Micromamba, instala Java 17 e Nextflow 23.10.1
+com o launcher compacto, que resolve dependências no primeiro uso.
+Reutiliza o Apptainer instalado ou o instala
+pelo PPA oficial para Ubuntu. Pacotes do sistema e mapeamentos fakeroot
+ausentes usam `sudo`. Pangolin e snpEff continuam como **diretórios sandbox**,
+apesar da extensão `.sif`; as demais imagens continuam em formato SIF.
+Não é necessário instalar Docker Engine.
+
+Para usar o checkout e as dependências de sistema existentes:
+
+```bash
+bash install.sh --repo-dir "$PWD" --no-update --skip-system-packages
+```
+
+Use `--dry-run` para simular, `--skip-containers` para instalar somente o
+ambiente de execução e `--no-path-update` para preservar os arquivos de
+inicialização do shell. `--install-root` e `--bin-dir` permitem instalações
+separadas. Alterações locais no checkout são preservadas. Basta ter
+`unsquashfs` no `PATH`; não é necessário criar links em `/usr/local/bin`.
+
+O comando `viralflow` gerado seleciona o Java do ambiente Micromamba e mantém
+o cache Nextflow na raiz da instalação. Execução direta pelo Nextflow exige
+versão >=23.10.1 e Java 17. As definições ARM64 foram mantidas, mas a validação
+neste host é AMD64.
+
+Consulte o [registro da migração](../UBUNTU26.04-CHANGES.md) para as alterações
+por arquivo e os resultados da validação. As instruções manuais abaixo
+descrevem as instalações Ubuntu anteriores; nesta branch prefira o instalador.
+
 ## Instalação no MacOS
 
 Devido a limitações do uso do singularity no MacOS, para rodar o ViralFlow neste tipo de sistema, sugerimos a utilização de um software de virtualização Linux chamado [Lima](https://github.com/lima-vm/lima).

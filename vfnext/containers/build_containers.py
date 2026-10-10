@@ -1,6 +1,7 @@
 import subprocess
 import os
 import sys
+import shutil
 
 arch = sys.argv[1]
 
@@ -11,8 +12,8 @@ containers = [
 
 # temporary logic, before push to remote repo
 container_commands = [
-    f"singularity build -F --fakeroot --sandbox pangolin:4.4.sif def_files/{arch}/Singularity_pangolin",
-    f"singularity build -F --fakeroot --sandbox snpeff:5.0.sif def_files/{arch}/Singularity_snpEff"
+    f"apptainer build -F --fakeroot --sandbox pangolin:4.4.sif def_files/{arch}/Singularity_pangolin",
+    f"apptainer build -F --fakeroot --sandbox snpeff:5.0.sif def_files/{arch}/Singularity_snpEff"
 ]
 
 failed_containers = []
@@ -66,7 +67,7 @@ if success:
     print("\nExecuting additional steps:\n")
 
     print("  > Loading sars-cov2 nextclade dataset...\n")
-    nextclade_command = "singularity exec -B nextclade_dataset/sars-cov-2:/tmp nextclade:3.18.sif nextclade dataset get --name 'sars-cov-2' --output-dir '/tmp'"
+    nextclade_command = "apptainer exec -B nextclade_dataset/sars-cov-2:/tmp nextclade:3.18.sif nextclade dataset get --name 'sars-cov-2' --output-dir '/tmp'"
     try:
         subprocess.check_call(nextclade_command, shell=True)
         print("    > Done <\n")
@@ -76,7 +77,7 @@ if success:
         success = False
 
     print("  > Downloading snpeff database catalog...")
-    snpeff_command = "singularity exec snpeff:5.0.sif snpEff databases > snpEff_DB.catalog"
+    snpeff_command = "apptainer exec snpeff:5.0.sif snpEff databases > snpEff_DB.catalog"
     try:
         subprocess.check_call(snpeff_command, shell=True)
         print("    > Done <")
@@ -85,19 +86,12 @@ if success:
         print(f"Error: {e}")
         success = False
 
-    # Check if unsquashfs is in the correct location
-    unsquashfs_desired_location = "/usr/local/bin/unsquashfs"
-    if not os.path.exists(unsquashfs_desired_location):
-        print("\n\033[91mError:\n  > unsquashfs executable not found at expected location. You should create a symbolic link using the following command:\033[0m")
-        unsquashfs_location = os.path.join(os.environ["HOME"], "miniconda3/envs/viralflow/bin/unsquashfs")
-        print(f"   >  sudo ln -s {unsquashfs_location} /usr/local/bin/unsquashfs\n")
-        print(f"  > If the first symbolic link does not solve the error you can alternatively create a symbolic link using the following command:")
-        print(f"   >  sudo ln -s /usr/bin/unsquashfs /usr/local/bin/unsquashfs\n")
-
-        # Print a message indicating the unsquashfs location
-        print(f"  > unsquashfs executable is located at {unsquashfs_location} or at /usr/bin/unsquashfs\n")
-        print(f"  > After create the symbolic link for unsquashfs, please run 'viralflow -build_containers' command again to finish the additional steps necessary to run ViralFlow correctly.")
+    if not shutil.which("unsquashfs"):
+        print("Error: unsquashfs was not found in PATH. Install squashfs-tools.")
+        success = False
 
 if success:
     print("\nAll steps from '-build_containers' completed successfully. You can test ViralFlow using the following command:")
     print("   > viralflow run --params-file test_files/sars-cov-2.params")
+
+sys.exit(0 if success else 1)

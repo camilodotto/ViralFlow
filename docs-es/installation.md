@@ -1,5 +1,47 @@
 # Instalación
 
+## Ubuntu 26.04 con Apptainer
+
+Esta branch utiliza Apptainer directamente en Ubuntu. El instalador se adaptó
+de `develop-SIF3-MAC`, conservando la instalación Linux:
+
+```bash
+git clone -b feat/develop/ubuntu26.04 https://github.com/camilodotto/ViralFlow.git
+cd ViralFlow
+bash install.sh --repo-dir "$PWD"
+export PATH="$HOME/.local/bin:$PATH"
+viralflow --version
+```
+
+Instala el entorno Micromamba, Java 17 y el launcher compacto de Nextflow 23.10.1,
+que resuelve dependencias en el primer uso. Reutiliza Apptainer o lo instala
+desde el PPA oficial de Ubuntu.
+Los paquetes del sistema y los mapeos fakeroot ausentes usan `sudo`.
+Pangolin y snpEff permanecen como **directorios sandbox**, aunque sus nombres
+terminan en `.sif`; las demás imágenes permanecen en formato SIF. No requiere
+Docker Engine.
+
+Para reutilizar el checkout y las dependencias del sistema:
+
+```bash
+bash install.sh --repo-dir "$PWD" --no-update --skip-system-packages
+```
+
+`--dry-run` simula la instalación, `--skip-containers` instala solamente el
+entorno y `--no-path-update` conserva los archivos de inicio del shell.
+`--install-root` y `--bin-dir` permiten instalaciones separadas. Los cambios
+locales se conservan. Basta tener `unsquashfs` en `PATH`; no se requiere un
+enlace en `/usr/local/bin`.
+
+El comando `viralflow` generado selecciona Java desde Micromamba y conserva
+la caché Nextflow en el directorio de instalación. La ejecución directa exige
+Nextflow >=23.10.1 y Java 17. ARM64 conserva sus definiciones; la validación
+de este host corresponde a AMD64.
+
+Consulte el [registro de migración](../UBUNTU26.04-CHANGES.md) para los cambios
+por archivo y los resultados. Las instrucciones manuales siguientes describen
+las instalaciones Ubuntu anteriores; en esta branch utilice el instalador.
+
 ## Instalación en MacOS
 
 Considerando las limitaciones del uso del Singularity en el MacOS, para rodar el ViralFlow en este tipo de sistema se sugiere utilizar un software de virtualización Linux llamado [Lima](https://github.com/lima-vm/lima).
