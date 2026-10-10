@@ -33,7 +33,7 @@ e inseridos.
 | `envs/arm64.yml` | Alterado | Remove spython e Nextflow 22.04.0; preserva as demais dependências. Nextflow é instalado separadamente. ARM64 não foi executado neste host AMD64. |
 | `wrapper/__init__.py` | Alterado | Remove imports sem uso de `distutils` e `logging`; `distutils` não existe no Python moderno. Troca manutenção pangolin para Apptainer, mantendo `--writable` e sandbox. Usa argumentos separados e propaga falhas nas duas atualizações pangolin e na inclusão snpEff, preservando nomes/caminhos com espaços. Restringe temporariamente o setuptools de build a `<81` para os instaladores legados, sem modificar pacotes upstream. Na atualização completa, alinha dependências aos requisitos Python das versões instaladas de pangolin/Snakemake e exige `pip check`; a atualização somente dos dados não faz essa instalação de dependências das ferramentas. Usa o interpretador Python ativo e diretório explícito para baixar/construir containers; interrompe a instalação se alguma etapa falhar. Seleciona Nextflow 23.10.1 por padrão, permite `NXF_VER` e propaga falha da pipeline ao chamador, inclusive à GUI. O parser de parâmetros é preservado. |
 | `vfnext/nextflow.config` | Alterado | Declara Nextflow >=23.10.1 como versão mínima validada nesta migração para o backend Apptainer. |
-| `vfnext/configs/containers.config` | Alterado | Troca o backend Singularity por Apptainer. Remove `--writable` global, incompatível com as imagens SIF. Restringe a escrita temporária a `runSnpEff` com `--writable-tmpfs`; os sandboxes permanecem em diretórios e sua manutenção persistente continua usando `--writable`. Nomes e versões de imagens são preservados. |
+| `vfnext/configs/containers.config` | Alterado | Troca o backend Singularity por Apptainer. Remove `--writable` global, incompatível com as imagens SIF. Restringe a escrita temporária a `runSnpEff` com `--writable-tmpfs`; os sandboxes permanecem em diretórios e sua manutenção persistente continua usando `--writable`. Define `XDG_CACHE_HOME` como `${task.workDir}/.cache` somente para `runPangolin`, permitindo criar o cache do Snakemake sem escrever no HOME ou no sandbox. Nomes e versões de imagens são preservados. |
 | `vfnext/configs/profiles.config` | Alterado | Migra os dois perfis Fiocruz para Apptainer e remove o caminho Singularity sem uso. Preserva executores, recursos, filas e binds. Configuração PBS foi inspecionada, sem execução em cluster. |
 | `vfnext/containers/spython_functions.py` | Alterado | Remove import spython não utilizado. Usa `apptainer pull` com a biblioteca Sylabs explícita, diretório de destino e verificação do código de saída. Corrige a condição do laço para que downloads ausentes não causem repetição infinita. Mantém o nome do arquivo para evitar alterar seus importadores. |
 | `vfnext/containers/build_containers.py` | Alterado | Troca construção/execução por Apptainer, preservando `--fakeroot --sandbox` para pangolin e snpEff. Verifica `unsquashfs` pelo `PATH`, sem exigir link em `/usr/local/bin`. Retorna falha se construção ou etapas auxiliares falharem, permitindo ao instalador detectar instalação incompleta. |
@@ -47,6 +47,7 @@ e inseridos.
 | `tests/install-script.test.sh` | Inserido, executável | Valida simulação AMD64/ARM64 sem mutações, instalação/reinstalação com comandos simulados, caminhos com espaços, ausência de sudo/downloads nas opções de reutilização e rejeição de opção inválida. Adaptado do teste do instalador da branch de referência. |
 | `tests/test_runtime.py` | Inserido | Nove testes para falhas de download/pipeline/manutenção, biblioteca Sylabs explícita e término do laço de downloads. Cobrem argumentos com espaços, limpeza das restrições temporárias de build, separação da atualização somente de dados e propagação de falhas da instalação/verificação de dependências. Simulam download snpEff vazio, construção com erro e ausência do binário final; nesses casos o catálogo anterior permanece intacto. Não executam análises biológicas. |
 | `tests/host-smoke.sh` | Inserido, executável | Gera uma referência aleatória não biológica e leituras sintéticas pareadas/simples. Executa a pipeline sem alterações em modo `custom`, com os limiares científicos padrão, e verifica consensos e diretório de resultados compilados. |
+| `tests/pangolin-cache-smoke.sh` | Inserido, executável | Executa duas tarefas Nextflow usando a configuração real de `runPangolin` e um sandbox selecionado. Inicializa os caches de fontes/runtime do Snakemake e verifica escrita e isolamento entre tarefas. Não chama pangolin nem usa sequências; aceita diretório de validação com espaços e exige diretório novo. |
 | `UBUNTU26.04-CHANGES.md` | Inserido | Este registro por arquivo, decisões, comandos de reprodução, evidências e limites. |
 
 Nenhum arquivo de código versionado foi removido ou renomeado.
@@ -219,6 +220,63 @@ Estes artefatos são ignorados pelo Git e não integram o código da migração:
 Não foram modificados pacotes do sistema, arquivos de inicialização do shell,
 configuração global do Apptainer ou restrições AppArmor do host. Alterações
 de código permanecem no checkout para revisão, sem publicação remota.
+
+## Correção do cache do Snakemake na execução pela GUI
+
+Em 09/10/2026, a execução pela GUI instalada falhou em `runPangolin` com
+`OSError: [Errno 30] Read-only file system: '/home/cdotto/.cache'`.
+O Nextflow usa `env -` e `apptainer exec --no-home`: o diretório HOME do
+usuário não está montado para escrita. O Snakemake 9.19.0 tenta criar nele
+seu cache de fontes antes de executar o workflow.
+
+A correção de produção acrescenta somente uma linha em
+`vfnext/configs/containers.config`: o argumento Apptainer `--env` define
+`XDG_CACHE_HOME` no diretório gravável de cada tarefa. O sandbox pangolin
+continua em diretório, montado para leitura. Não foram alterados comandos
+pangolin, algoritmos, módulos, workflows, versões ou dados das ferramentas.
+O teste inserido e este documento completam os três arquivos desta correção;
+nenhum arquivo foi removido.
+
+Validação realizada com Nextflow 23.10.1 e Apptainer 1.5.3:
+
+- Reprodução da falha original no sandbox instalado, inicializando apenas
+  `snakemake.sourcecache.SourceCache`: mesmo erro de filesystem somente leitura.
+- Teste pelo Nextflow com o sandbox do checkout: duas tarefas concluídas,
+  código 0, caches de fontes/runtime graváveis e separados por tarefa.
+- Mesmo teste com o sandbox de `~/ViralFlowGUI/ViralFlow`, em um diretório
+  com espaços: duas tarefas concluídas, código 0.
+- Configuração instalada atualizada com a mesma linha após os testes;
+  conteúdo conferido como idêntico ao arquivo deste checkout. Essa alteração
+  local também está em `~/ViralFlowGUI/ViralFlow/vfnext/configs/containers.config`;
+  sua versão anterior foi preservada no diretório de evidências abaixo.
+
+A análise que falhou na GUI não foi reexecutada nesta validação. Os testes
+verificam o problema de cache e a configuração do ambiente de execução.
+Não foi necessária nova alteração no código da GUI nem reconstrução dos
+containers ou do pacote `.deb` para esta correção.
+
+Evidências locais, ignoradas pelo Git, em
+`.venv/ubuntu26.04/validation/pangolin-cache/`: `before.log`,
+`installed-containers.config.before`, `development-final/` e
+`installed sandbox/`. Cada teste concluído contém `pipeline.log`,
+`trace.txt`, comandos gerados pelo Nextflow e `cache-probe.json` por tarefa.
+
+Reprodução do teste com o ambiente e as dependências já instalados:
+
+```bash
+XDG_CACHE_HOME="$PWD/.venv/ubuntu26.04/cache" \
+MAMBA_ROOT_PREFIX="$PWD/.venv/ubuntu26.04/micromamba" \
+NXF_HOME="$PWD/.venv/ubuntu26.04/nextflow" NXF_VER=23.10.1 \
+NEXTFLOW_COMMAND="$PWD/.venv/ubuntu26.04/bin/nextflow" \
+  .venv/ubuntu26.04/bin/micromamba run -n viralflow \
+  bash tests/pangolin-cache-smoke.sh \
+  "$PWD/vfnext/containers/pangolin:4.4.sif" /tmp/viralflow-cache-validation-nova
+```
+
+O `XDG_CACHE_HOME` externo deste comando isola o cache do Micromamba para o
+teste; o cache dentro do container é definido pela configuração de produção.
+A opção de ambiente está documentada em
+[Apptainer: environment and metadata](https://apptainer.org/docs/user/latest/environment_and_metadata.html).
 
 ## Referências de compatibilidade
 
