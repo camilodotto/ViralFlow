@@ -20,7 +20,7 @@ spec.loader.exec_module(containers)
 
 class RuntimeTests(unittest.TestCase):
     def test_failed_download_stops_container_build(self):
-        failure = subprocess.CalledProcessError(1, "apptainer pull")
+        failure = subprocess.CalledProcessError(1, "singularity pull")
         with patch.object(wrapper.subprocess, "check_call", side_effect=failure) as run:
             with self.assertRaises(subprocess.CalledProcessError):
                 wrapper.build_containers(str(ROOT), "amd64")
@@ -82,6 +82,7 @@ class RuntimeTests(unittest.TestCase):
                 temporary = []
 
                 def fail(command, cwd):
+                    self.assertEqual(command[0], "singularity")
                     temporary.append(Path(command[command.index("--bind") + 1].removesuffix(":/tmp")))
                     self.assertEqual((temporary[0] / "build-constraints.txt").read_text(), "setuptools<81\n")
                     self.assertIn("PIP_BUILD_CONSTRAINT=/tmp/build-constraints.txt", command)
@@ -108,6 +109,7 @@ class RuntimeTests(unittest.TestCase):
         with patch.object(wrapper.subprocess, "check_call") as run:
             wrapper.update_pangolin_data("/installation")
         self.assertEqual(run.call_count, 1)
+        self.assertEqual(run.call_args.args[0][0], "singularity")
         self.assertEqual(run.call_args.args[0][-2:], ["pangolin", "--update-data"])
 
     def test_full_update_reports_dependency_installation_and_check_failures(self):
@@ -133,7 +135,7 @@ class RuntimeTests(unittest.TestCase):
                 catalog.write_text("existing catalog\n")
                 script = root / "add_entries_SnpeffDB.sh"
                 shutil.copy2(ROOT / "vfnext/containers/add_entries_SnpeffDB.sh", script)
-                executable = root / "apptainer"
+                executable = root / "singularity"
                 executable.write_text("""#!/bin/sh
 case " $* " in
   *" efetch "*)
@@ -150,16 +152,18 @@ esac
                 result = subprocess.run(["bash", str(script), "Synthetic test", "TEST", "amd64"],
                                         env=environment, capture_output=True, text=True)
                 self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertNotIn("command not found", result.stderr)
                 self.assertEqual(catalog.read_text(), "existing catalog\n")
                 if failure == "download":
                     self.assertEqual(config.read_text(), "# existing configuration\n")
                     self.assertFalse((config.parent / "data/TEST").exists())
 
-    def test_pull_does_not_depend_on_default_apptainer_remote(self):
+    def test_pull_uses_singularity_and_explicit_library(self):
         image = ("test", "example:1", "test/test/example:1")
         with patch.object(containers.subprocess, "check_call") as run:
             containers.container_pull("/tmp/container-test", [image])
         command = run.call_args.args[0]
+        self.assertEqual(command[0], "singularity")
         self.assertEqual(command[command.index("--library") + 1], "https://library.sylabs.io")
         self.assertEqual(run.call_args.kwargs["cwd"], "/tmp/container-test")
 

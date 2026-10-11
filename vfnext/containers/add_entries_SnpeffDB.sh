@@ -46,7 +46,7 @@ trap 'rm -rf "$TMP_DIR"' EXIT
 
 # GenBank assembly records may omit the sequence unless gbwithparts is used.
 echo "@ downloading GenBank..."
-apptainer exec --fakeroot "$EFETCH_CTNR" efetch -db nucleotide \
+singularity exec --fakeroot "$EFETCH_CTNR" efetch -db nucleotide \
     -id "$organism_refseq_code" -format gbwithparts > "$TMP_DIR/genes.gbk"
 if ! grep -q '^ORIGIN' "$TMP_DIR/genes.gbk"; then
     echo "ERROR: Downloaded GenBank record contains no sequence."
@@ -71,7 +71,7 @@ cp "$TMP_DIR/genes.gbk" "$DATA_DIR/genes.gbk"
 
 # build database
 echo "@ rebuild database"
-apptainer exec --fakeroot --writable "$SNPEFF_CTNR" snpEff build -genbank -v "$organism_refseq_code"
+singularity exec --fakeroot --writable "$SNPEFF_CTNR" snpEff build -genbank -v "$organism_refseq_code"
 if [ ! -s "$DATA_DIR/snpEffectPredictor.bin" ]; then
     echo "ERROR: snpEff did not produce the custom database."
     exit 1
@@ -79,5 +79,5 @@ fi
 
 # update catalog
 echo "@ update snpeff database catalog..."
-apptainer exec "$SNPEFF_CTNR" snpEff databases > "$TMP_DIR/snpEff_DB.catalog"
+singularity exec "$SNPEFF_CTNR" snpEff databases > "$TMP_DIR/snpEff_DB.catalog"
 mv "$TMP_DIR/snpEff_DB.catalog" snpEff_DB.catalog

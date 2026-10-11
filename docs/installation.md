@@ -1,10 +1,11 @@
 # Installation
 
-## Ubuntu 26.04 with Apptainer
+## Ubuntu 26.04
 
 This branch uses Micromamba 1.5.7, Nextflow 22.04.0 and Java 17.
-Apptainer runs the containers through its `singularity` compatibility command;
-`singularity --version` must report Apptainer. Pangolin and snpEff remain
+ViralFlow invokes `singularity` for container build, download, maintenance and
+execution, as in the upstream branch. The GUI installs Apptainer and provides
+the `singularity` compatibility command. Pangolin and snpEff remain
 **sandbox directories**, despite their `.sif` suffix; the other images are SIF.
 
 The ViralFlow GUI manages the installation in separate steps: Micromamba,
@@ -12,8 +13,9 @@ Nextflow, Apptainer, ViralFlow and containers. Its default paths are
 `~/ViralFlowGUI/bin`, `~/ViralFlowGUI/micromamba` and `~/ViralFlowGUI/ViralFlow`.
 This branch does not provide `install.sh`.
 
-For manual installation, install those runtime dependencies first, put their
-commands in `PATH`, then create the environment from the appropriate YAML:
+For manual installation, provide Micromamba and a working `singularity` command
+on the host (Singularity or Apptainer's compatibility command), put them in
+`PATH`, then create the environment from the appropriate YAML:
 
 ```bash
 git clone -b feat/develop/ubuntu26.04 https://github.com/camilodotto/ViralFlow.git
@@ -26,7 +28,9 @@ micromamba run -n viralflow viralflow --version
 
 Java 17 and Nextflow 22.04.0 come from the YAML, matching the upstream
 environment. The GUI also installs its own Nextflow launcher in `bin` and
-selects that absolute path. Apptainer is provided by the host. For an existing environment, use
+selects that absolute path. The container runtime is provided by the host;
+the YAML does not install a second runtime in the Conda environment.
+For an existing environment, use
 `micromamba update -n viralflow -f envs/amd64.yml --prune -y`.
 The GUI pins its own Nextflow binary and keeps its cache under the installation
 root. See [the migration record](../UBUNTU26.04-CHANGES.md) for changes and

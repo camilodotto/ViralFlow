@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Exercise Snakemake's cache through the production Apptainer configuration.
+# Exercise Snakemake's cache through the production Singularity configuration.
 # No sequence input or biological analysis is used.
 set -euo pipefail
 

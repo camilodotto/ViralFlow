@@ -1,10 +1,11 @@
 # Instalación
 
-## Ubuntu 26.04 con Apptainer
+## Ubuntu 26.04
 
 Esta branch utiliza Micromamba 1.5.7, Nextflow 22.04.0 y Java 17.
-Apptainer ejecuta los contenedores mediante su comando de compatibilidad
-`singularity`; `singularity --version` debe informar Apptainer. Pangolin y snpEff
+ViralFlow llama a `singularity` para construir, descargar, mantener y ejecutar
+los contenedores, como en upstream. La GUI instala Apptainer y proporciona su
+comando de compatibilidad `singularity`. Pangolin y snpEff
 permanecen como **directorios sandbox**, a pesar de su sufijo `.sif`; las demás
 imágenes son SIF.
 
@@ -13,8 +14,9 @@ Nextflow, Apptainer, ViralFlow y contenedores. Las rutas predeterminadas son
 `~/ViralFlowGUI/bin`, `~/ViralFlowGUI/micromamba` y `~/ViralFlowGUI/ViralFlow`.
 Esta branch no proporciona `install.sh`.
 
-Para instalar manualmente, instale primero estas dependencias, coloque sus
-comandos en `PATH` y cree el entorno con el YAML de la arquitectura:
+Para instalar manualmente, proporcione Micromamba y un comando `singularity`
+funcional en el host (Singularity o el comando de compatibilidad de Apptainer),
+colóquelos en `PATH` y cree el entorno con el YAML de la arquitectura:
 
 ```bash
 git clone -b feat/develop/ubuntu26.04 https://github.com/camilodotto/ViralFlow.git
@@ -27,7 +29,9 @@ micromamba run -n viralflow viralflow --version
 
 Java 17 y Nextflow 22.04.0 están definidos en el YAML, como en el entorno
 original. La GUI también instala su launcher Nextflow en `bin` y selecciona
-esa ruta absoluta. Apptainer está instalado en el host. Para actualizar un entorno existente, utilice
+esa ruta absoluta. El runtime de contenedores está instalado en el host;
+el YAML no instala un segundo runtime en el entorno Conda.
+Para actualizar un entorno existente, utilice
 `micromamba update -n viralflow -f envs/amd64.yml --prune -y`.
 La GUI selecciona su propio binario Nextflow y mantiene la caché bajo la raíz
 de la instalación. Consulte el [registro de migración](../UBUNTU26.04-CHANGES.md)

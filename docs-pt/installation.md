@@ -1,10 +1,11 @@
 # Instalação
 
-## Ubuntu 26.04 com Apptainer
+## Ubuntu 26.04
 
 Esta branch utiliza Micromamba 1.5.7, Nextflow 22.04.0 e Java 17.
-Apptainer executa os containers pelo comando de compatibilidade `singularity`;
-`singularity --version` deve informar Apptainer. Pangolin e snpEff permanecem
+ViralFlow chama `singularity` na construção, download, manutenção e execução
+dos containers, como no upstream. A GUI instala Apptainer e disponibiliza o
+comando de compatibilidade `singularity`. Pangolin e snpEff permanecem
 como **diretórios sandbox**, apesar da extensão `.sif`; as demais imagens são SIF.
 
 A GUI do ViralFlow gerencia a instalação em etapas separadas: Micromamba,
@@ -12,8 +13,9 @@ Nextflow, Apptainer, ViralFlow e containers. Os caminhos padrão são
 `~/ViralFlowGUI/bin`, `~/ViralFlowGUI/micromamba` e `~/ViralFlowGUI/ViralFlow`.
 Esta branch não fornece `install.sh`.
 
-Para instalar manualmente, instale primeiro essas dependências de execução,
-coloque seus comandos no `PATH` e crie o ambiente pelo YAML da arquitetura:
+Para instalar manualmente, disponibilize Micromamba e um comando `singularity`
+funcional no host (Singularity ou o comando de compatibilidade do Apptainer),
+coloque-os no `PATH` e crie o ambiente pelo YAML da arquitetura:
 
 ```bash
 git clone -b feat/develop/ubuntu26.04 https://github.com/camilodotto/ViralFlow.git
@@ -26,7 +28,8 @@ micromamba run -n viralflow viralflow --version
 
 Java 17 e Nextflow 22.04.0 são fornecidos pelo YAML, como no ambiente original.
 A GUI também instala seu launcher Nextflow em `bin` e seleciona esse caminho
-absoluto. Apptainer é fornecido pelo host. Para atualizar um ambiente existente, use
+absoluto. O runtime de containers é fornecido pelo host; o YAML não instala
+um segundo runtime no ambiente Conda. Para atualizar um ambiente existente, use
 `micromamba update -n viralflow -f envs/amd64.yml --prune -y`.
 A GUI fixa seu próprio binário Nextflow e mantém o cache na raiz da instalação.
 Consulte o [registro da migração](../UBUNTU26.04-CHANGES.md) para alterações e

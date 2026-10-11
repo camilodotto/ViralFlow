@@ -1,3 +1,4 @@
+from logging import root
 import os
 import shlex
 import subprocess
@@ -119,7 +120,7 @@ def _update_pangolin(root_path, option):
     with tempfile.TemporaryDirectory(prefix="viralflow-pangolin-") as temporary:
         with open(os.path.join(temporary, "build-constraints.txt"), "w") as constraints:
             constraints.write("setuptools<81\n")
-        command = ["apptainer", "exec", "--writable", "--bind", f"{temporary}:/tmp",
+        command = ["singularity", "exec", "--writable", "--bind", f"{temporary}:/tmp",
                    "./pangolin:4.4.sif", "env",
                    "PIP_BUILD_CONSTRAINT=/tmp/build-constraints.txt"]
         containers_dir = os.path.join(root_path, "vfnext", "containers")

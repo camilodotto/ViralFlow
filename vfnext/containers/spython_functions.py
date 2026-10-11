@@ -26,7 +26,7 @@ def container_pull(containers_dir, containers_name_list):
         full_repo = container[2]
         print(f"Downloading container {container_version}. This could be take a while. Please Wait ...")
         subprocess.check_call([
-            "apptainer", "pull", "-F", "--library", "https://library.sylabs.io",
+            "singularity", "pull", "-F", "--library", "https://library.sylabs.io",
             f"{container_version}.sif", f"library://{full_repo}"
         ], cwd=containers_dir)
 

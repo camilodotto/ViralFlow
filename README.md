@@ -7,7 +7,7 @@ If you use this workflow for academic purposes, please cite:
 
 ## Documentation
 
-For Ubuntu 26.04 with Apptainer, see the [installation guide](docs/installation.md#ubuntu-2604-with-apptainer) and [migration record](UBUNTU26.04-CHANGES.md).
+For Ubuntu 26.04, see the [installation guide](docs/installation.md#ubuntu-2604) and [branch differences](UBUNTU26.04-CHANGES.md).
 
 The official documentation can be accessed [here](https://viralflow.github.io/index-en.html) in English or [here](https://viralflow.github.io/) in Portuguese.
 
