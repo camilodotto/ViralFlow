@@ -1,415 +1,433 @@
-# Alterações do fork Camilo em relação ao ViralFlow upstream
-
-## Escopo da comparação
-
-Este documento resume as diferenças de código entre:
-
-- base: `WallauBioinfo/develop` (`16cb3f3`);
-- fork analisado: `origin/develop-SIF3-MAC` (`537cf8e`).
-
-A comparação foi feita a partir do ancestral comum dos branches. No momento da
-análise, o fork continha 67 commits adicionais e não havia commits do upstream
-pendentes de incorporação.
-
-Arquivos exclusivamente documentais não foram analisados. O `README.md` e o
-novo `install.sh` são citados apenas para registrar sua existência, sem
-detalhamento de conteúdo.
-
-## Resumo geral
-
-As alterações do fork estão concentradas nos seguintes pontos:
-
-1. **Compatibilidade com Linux, macOS/Lima e arquiteturas amd64/arm64**
-   - Separação entre dependências Python/Conda e ferramentas instaladas
-     externamente, especialmente Nextflow.
-   - Apptainer passou a ser requisito obrigatório para construção, download,
-     atualização e execução dos contêineres. Singularity não é mais considerado
-     runtime suficiente para este fork.
-   - Construção dos contêineres em uma área temporária localizada no sistema de
-     arquivos Linux, evitando limitações de diretórios compartilhados pelo
-     macOS.
-   - Uso configurável de diretórios de staging, cache e trabalho, com
-     `/var/tmp/viralflow-apptainer` como padrão.
-
-2. **Reestruturação da construção e manutenção dos contêineres**
-   - Migração da lógica de construção para comandos estruturados de Apptainer.
-   - Remoção do fallback operacional para Singularity nos fluxos de wrapper,
-     pull, build e personalização de bancos.
-   - Download de contêineres com retentativas configuráveis e remoção de SIFs
-     parciais após falhas.
-   - Geração de imagens SIF em vez de sandboxes graváveis.
-   - Criação de overlays persistentes separados para Pangolin e snpEff.
-   - Opções para limpeza dos artefatos e controle da quantidade de processos do
-     `mksquashfs`.
-
-3. **Atualização do Pangolin**
-   - O contêiner passou a instalar componentes do Pangolin a partir dos
-     respectivos repositórios Git.
-   - O comando de atualização identifica dinamicamente a versão estável mais
-     recente do Pangolin e atualiza suas dependências dentro de um overlay.
-   - Foi adicionada uma verificação de consistência das dependências Python após
-     a atualização.
-
-4. **Persistência e validação do banco do snpEff**
-   - Bancos personalizados são gravados em um overlay próprio, sem modificar a
-     imagem SIF.
-   - A pipeline verifica se o código solicitado existe no catálogo e se o banco
-     correspondente está efetivamente instalado.
-   - Antes de iniciar o Nextflow, o wrapper consulta o catálogo local do snpEff
-     e verifica a presença do banco no overlay. Se o código genômico estiver
-     ausente do catálogo local ou ainda não estiver instalado, o banco é
-     preparado no overlay antes da execução.
-   - Mensagens de erro foram ampliadas para orientar o usuário quando o banco
-     não está pronto.
-
-5. **Novos gráficos de controle de qualidade**
-   - A compilação dos resultados passou a gerar gráficos SVG de quantidade de
-     reads, relação entre amplitude e profundidade de cobertura e distribuição
-     das amostras por faixas de cobertura.
-   - Controles negativos identificados pelo prefixo `Cneg` recebem destaque
-     visual.
-
-6. **Ajustes de robustez e integração**
-   - Comandos críticos passaram a usar listas de argumentos e
-     `subprocess.check_call` em alguns pontos, reduzindo problemas de quoting.
-   - Foi incluído um arquivo de metadados para integração com a interface
-     gráfica do ViralFlow.
-   - O processo do iVar deixou de depender de `sed -i` para alterar cabeçalhos
-     FASTA.
-
-## Alterações detalhadas por arquivo
-
-### Ambientes e empacotamento
-
-#### `envs/amd64.yml`
-
-- Nextflow e SingularityCE foram removidos do ambiente Conda ativo.
-- As demais dependências usadas pelo wrapper e pela pipeline foram mantidas.
-- A intenção é instalar Nextflow separadamente e exigir Apptainer como runtime
-  de contêineres, evitando conflitos de bibliotecas no ambiente Conda.
-
-#### `envs/arm64.yml`
-
-- Nextflow também foi removido do ambiente Conda ativo.
-- O ambiente continua contendo as bibliotecas Python e ferramentas auxiliares
-  necessárias para arm64.
-
-#### `envs/amd64-legado.yml`
-
-- Preserva a definição anterior do ambiente amd64, incluindo Nextflow 22.04.0 e
-  SingularityCE 3.11.4.
-- Funciona como referência ou alternativa para a instalação legada.
+# Diferenças de develop-SIF3-MAC em relação a WallauBioinfo/develop
 
-#### `envs/arm64-legado.yml`
+## Resumo
 
-- Preserva a definição anterior do ambiente arm64, incluindo Nextflow 22.04.0.
-- Funciona como referência ou alternativa para a instalação legada.
+A branch `develop-SIF3-MAC` reúne adaptações de instalação e execução para
+Linux/WSL AMD64 e ARM64 e para macOS por meio de uma VM Linux ARM64 do Lima.
+Inclui um instalador próprio, separa Nextflow do ambiente Conda e exige
+Apptainer nos comandos de construção, download e manutenção dos containers.
 
-#### `envs/legado.yml`
+Pangolin e snpEff passam a ser construídos como imagens SIF, com overlays
+persistentes separados para atualizações e bancos locais. A construção usa
+uma área de trabalho no sistema de arquivos Linux, permitindo manter o
+repositório em uma pasta macOS compartilhada com a VM. Os overlays são montados
+como somente leitura durante a execução normal da pipeline.
 
-- Adiciona uma definição legada genérica com Python, Java, bibliotecas Python,
-  snpEff e utilitários de linha de comando.
-- Registra explicitamente que Nextflow e SingularityCE devem ser instalados fora
-  do ambiente.
-
-#### `setup.py`
-
-- Contém apenas um ajuste de formatação na descrição do pacote.
-- Não há mudança funcional no empacotamento.
-
-### Configuração e módulos da pipeline
-
-#### `vfnext/configs/containers.config`
-
-- Remove as opções globais `--writable` e `--writable-tmpfs`.
-- Configura overlays somente nos processos que precisam de escrita persistente:
-  `runPangolin`, `runSnpEff` e `checkSnpEffDB`.
-- Os overlays são montados como somente leitura durante a execução normal da
-  pipeline:
-  - `pangolin_4.4.overlay`;
-  - `snpeff_5.0.overlay`.
-- Isso evita o conflito entre `--writable-tmpfs` e overlays e reduz o escopo de
-  permissões de escrita nos demais contêineres.
-
-#### `vfnext/modules/checkSnpEffDB.nf`
-
-- Substitui o código Python embutido no módulo pelo script independente
-  `vfnext/bin/checkSnpEffDB.py`.
-- Passa ao script o código da referência, o vírus configurado, o catálogo e os
-  caminhos dos arquivos de saída.
-- Mantém como produto do processo o arquivo `snpEffDB_entry_found.log`.
-
-#### `vfnext/modules/runIvar.nf`
-
-- Substitui a sequência `mv` e `sed -i` por `awk`, gerando diretamente os FASTA
-  finais com o cabeçalho esperado.
-- Remove explicitamente os arquivos intermediários após a conversão.
-- O comportamento funcional da geração de consensos permanece o mesmo, mas a
-  implementação fica menos dependente das diferenças entre versões de `sed`.
-
-### Scripts de processamento e resultados
-
-#### `vfnext/bin/checkSnpEffDB.py`
-
-Novo script responsável por validar o banco do snpEff antes da anotação:
-
-- procura o código de referência no catálogo;
-- rejeita ausência ou múltiplas correspondências;
-- procura a instalação do banco nos caminhos conhecidos das imagens amd64 e
-  arm64;
-- impede que a execução dependa de download automático do banco;
-- grava o log de correspondências também nos casos de erro;
-- apresenta mensagens com contexto e indicação de preparação prévia do banco.
-
-#### `vfnext/bin/compileOutput.py`
-
-Adiciona geração direta de gráficos SVG, sem introduzir uma biblioteca gráfica
-externa:
-
-- `reads_count_plot.svg`: barras com a quantidade total de reads por amostra;
-- `coverage_plot.svg`: relação entre amplitude e profundidade média da
-  cobertura, incluindo uma regressão linear simples;
-- `coverage_breadth_summary_plot.svg`: quantidade de amostras nas faixas
-  0–30%, acima de 30% e abaixo de 70%, e 70–100%;
-- `coverage_breadth_decile_plot.svg`: distribuição em intervalos de 10%.
-
-Também foram adicionados:
-
-- conversão de valores de cobertura para porcentagem quando necessário;
-- cálculo de limites de eixo arredondados;
-- ordenação estável das amostras no gráfico de reads;
-- rótulos inclinados para suportar maior quantidade de amostras;
-- destaque azul e legenda para controles negativos `Cneg`;
-- validação das colunas necessárias e avisos quando não há dados utilizáveis.
-
-Os gráficos são gerados automaticamente junto com `reads_count.csv` e
-`short_summary.csv`.
-
-### Construção e manutenção dos contêineres
-
-#### `vfnext/containers/build_containers.py`
-
-O script foi amplamente reestruturado:
-
-- usa `argparse` e valida a arquitetura (`amd64` ou `arm64`);
-- aceita `--clean`, `--staging-dir` e `--mksquashfs-processors`;
-- usa um diretório de staging configurável, por padrão em
-  `/var/tmp/viralflow-apptainer`;
-- separa diretórios temporários, cache e workdir;
-- limpa `tmpdir` e `workdir` antes de cada construção, preservando o cache;
-- direciona as variáveis de ambiente de Apptainer para o staging;
-- mantém variáveis `SINGULARITY_*` apenas como compatibilidade ambiental
-  herdada, mas o executável exigido pelo script é `apptainer`;
-- constrói os SIFs no sistema de arquivos Linux e depois os copia para o
-  repositório, o que atende ao uso do repositório em um volume macOS montado no
-  Lima;
-- limita por padrão o `mksquashfs` a um processo;
-- remove artefatos parciais após falhas;
-- cria overlays separados:
-  - 2 GiB para Pangolin;
-  - 1 GiB para snpEff;
-- permite remover imagens, overlays e catálogo antes da reconstrução;
-- carrega o dataset do Nextclade quando a imagem correspondente está presente;
-- gera o catálogo do snpEff usando seu overlay;
-- verifica a disponibilidade de `unsquashfs`;
-- retorna códigos de erro em falhas, em vez de apenas imprimir o resultado.
-
-O script verifica explicitamente a presença do executável `apptainer` antes da
-construção. Singularity não satisfaz mais esse fluxo.
-
-#### `vfnext/containers/build_containers_original.py`
-
-- Cópia auxiliar da implementação antiga do construtor de contêineres.
-- Não é chamada pelo wrapper nem pela pipeline.
-- Deve ser avaliada para remoção antes de uma integração, pois representa código
-  histórico duplicado.
-
-#### `vfnext/containers/build_containers_alterado.py`
-
-- Registra uma versão intermediária das adaptações para macOS/Lima.
-- Usa staging dentro da `HOME` da VM e ainda contém decisões anteriores sobre
-  imagens e overlays.
-- Não é chamada pelo wrapper nem pela pipeline.
-- Deve ser tratada como arquivo de desenvolvimento e avaliada para remoção.
-
-#### `vfnext/containers/add_entries_SnpeffDB.sh`
-
-- Ativa execução estrita do shell com `set -euo pipefail`.
-- Exige o executável `apptainer`; Singularity não é mais aceito como fallback.
-- valida argumentos, imagens e overlay antes de iniciar;
-- detecta o diretório interno do snpEff executando comandos no contêiner, em vez
-  de acessar a imagem como diretório;
-- grava configuração, dados e banco no overlay persistente;
-- evita duplicar a entrada no `snpEff.config`;
-- usa diretório temporário com limpeza automática;
-- baixa o registro de referência pelo contêiner do EDirect;
-- reconstrói o banco e atualiza o catálogo após a inclusão.
-
-#### `vfnext/containers/spython_functions.py`
-
-- Remove a dependência direta da biblioteca `spython` para o pull de imagens.
-- Passa a exigir o executável `apptainer`.
-- Substitui `singularity pull` por `apptainer pull -F`.
-- Adiciona retentativas configuráveis para download de contêineres:
-  - `VIRALFLOW_CONTAINER_PULL_RETRIES`, com padrão `3`;
-  - `VIRALFLOW_CONTAINER_PULL_RETRY_DELAY`, com padrão de 10 segundos.
-- Remove arquivos SIF parciais antes de tentar novamente após uma falha de
-  download.
-- Mostra no log a tentativa atual e o total de tentativas configurado.
-- Usa `subprocess.check_call` com lista de argumentos, evitando montagem de
-  comandos por string.
-- Passa a reportar falha quando algum contêiner obrigatório não é baixado após
-  as tentativas previstas.
-
-#### `vfnext/containers/def_files/amd64/Singularity_pangolin`
-
-- Adiciona compiladores, cabeçalhos Python e Git.
-- Atualiza o Micromamba antes da instalação.
-- Instala as ferramentas base pelo ambiente Micromamba.
-- Instala Pangolin 4.4 e seus projetos relacionados a partir dos repositórios
-  Git.
-- Fixa `setuptools` abaixo da versão 81 e usa `--no-build-isolation` para
-  compatibilidade com o processo atual de build.
-
-#### `vfnext/containers/def_files/arm64/Singularity_pangolin`
-
-- Alinha a instalação arm64 à estratégia usada em amd64.
-- Garante a presença de Git e pip no ambiente.
-- Instala Pangolin e projetos relacionados via pip/Git com
-  `--no-build-isolation`.
-- Substitui a instalação de `setuptools==81.0.0` por `setuptools<81`.
-
-#### `vfnext/containers/def_files/amd64/Singularity_snpEff`
-
-- Atualiza as fontes APT do Debian Buster para `archive.debian.org`.
-- Desativa a validação de expiração dos metadados antigos.
-- Permite que a imagem continue sendo construída após a retirada dos
-  repositórios Buster dos servidores Debian regulares.
-
-#### `vfnext/containers/def_files/arm64/Singularity_snpEff`
-
-- Inclui no build da imagem o download do banco `NC_045512.2`.
-- Garante que esse banco esteja disponível sem download durante a execução da
-  pipeline.
-
-### Wrapper e comandos
-
-#### `wrapper/__init__.py`
-
-As principais alterações são:
-
-- exigência explícita de `apptainer`; Singularity não é mais runtime aceito pelo
-  wrapper;
-- funções auxiliares para executar comandos, criar overlays e remover artefatos;
-- execução do script de personalização do snpEff com argumentos estruturados;
-- carregamento dos parâmetros da execução em estrutura reutilizável antes da
-  montagem da linha de comando do Nextflow;
-- identificação automática do código genômico que precisa de banco snpEff
-  quando `runSnpEff` está habilitado:
-  - para `virus=sars-cov2`, usa `NC_045512.2`;
-  - para outros vírus, usa `refGenomeCode`;
-- consulta ao catálogo local `snpEff_DB.catalog` para verificar se o código
-  genômico já está registrado;
-- verificação, via `apptainer exec` com overlay somente leitura, se o diretório
-  do banco existe dentro dos caminhos conhecidos do snpEff na imagem;
-- chamada automática de `add_entries_to_DB` antes da execução da pipeline quando
-  o código está ausente do catálogo local ou o banco ainda não está instalado no
-  overlay;
-- limpeza de imagens, overlays e catálogo por arquitetura;
-- suporte às opções de limpeza e staging na construção dos contêineres;
-- atualização do Pangolin dentro de overlay persistente;
-- identificação da versão estável mais recente do Pangolin por meio da API do
-  GitHub;
-- fallback da release mais recente para paginação das tags;
-- aceitação apenas de tags estáveis no formato `vX.Y` ou `vX.Y.Z`;
-- atualização ordenada das dependências do Pangolin;
-- execução de `pip check` após a atualização;
-- atualização separada dos dados do Pangolin no mesmo overlay;
-- possibilidade de sobrescrever a versão do Nextflow pela variável `NXF_VER`,
-  mantendo `22.04.0` como padrão.
-
-#### `wrapper/cli.py`
-
-- O comando `viralflow build-containers` recebe duas novas opções:
-  - `--clean`, para remover artefatos antes da reconstrução;
-  - `--staging-dir`, para escolher o local usado pelo Apptainer.
-- As opções são encaminhadas para a implementação no wrapper.
-- O comando `viralflow run` passa a receber `--arch`, com valores `amd64` ou
-  `arm64`, para informar a arquitetura usada na preparação automática do banco
-  snpEff antes da execução.
-
-### Integração e arquivos auxiliares
-
-#### `.viralflow-gui`
-
-- Novo arquivo JSON que mapeia ações da interface gráfica para comandos do CLI:
-  execução da pipeline, atualização do Pangolin, atualização de dados,
-  personalização do snpEff e construção dos contêineres.
-
-#### `.gitignore`
-
-- Passa a ignorar arquivos `vfnext/containers/*.overlay`.
-- Evita que overlays locais, potencialmente grandes e específicos de cada
-  instalação, sejam versionados.
-
-## Arquivos apenas citados
-
-### `install.sh`
-
-Foi adicionado um instalador automatizado para Linux/WSL amd64 e arm64 e para
-macOS por meio de uma VM Lima. Ele instala e configura as dependências,
-ambiente, comandos e contêineres necessários. Sua implementação não foi
-detalhada neste documento por solicitação de escopo.
-
-### `tests/install-script.test.sh`
-
-Foi adicionado um teste de sintaxe e de execução simulada do `install.sh`,
-cobrindo Linux amd64, Linux arm64 e macOS arm64. Ele é citado por estar
-diretamente associado ao instalador, mas não faz parte da lógica da pipeline.
-
-### `README.md`
-
-Foi ampliado para documentar instalação e uso. As alterações não foram
-analisadas por se tratar de documentação.
-
-## Arquivos documentais excluídos
-
-Não foram considerados na análise funcional:
-
-- `.readthedocs.yaml`;
-- `dev.md`;
-- `docs/installation.md`;
-- `docs/quickstart.md`;
-- `docs-es/installation.md`;
-- `docs-es/quickstart.md`;
-- `docs-pt/installation.md`;
-- `docs-pt/quickstart.md`.
-
-## Pontos sugeridos para revisão antes da integração
-
-1. Comunicar explicitamente aos usuários e mantenedores que Apptainer é
-   obrigatório e que Singularity não satisfaz mais as dependências deste fork.
-2. Remover ou mover para histórico os arquivos
-   `build_containers_original.py` e `build_containers_alterado.py`.
-3. Confirmar se os arquivos `*-legado.yml` devem permanecer no repositório
-   principal.
-4. Revisar a estratégia de atualização dinâmica do Pangolin, pois ela reduz o
-   pinning e pode afetar a reprodutibilidade entre instalações.
-5. Avaliar se os geradores SVG devem permanecer implementados manualmente em
-   `compileOutput.py` ou ser isolados em módulo próprio.
-6. Confirmar se o banco incluído diretamente na imagem arm64 também deve ser
-   incorporado à imagem amd64, ou se ambos devem depender exclusivamente do
-   overlay.
-7. Validar se a preparação automática do banco snpEff antes da execução deve
-   fazer download/alteração de overlay implicitamente ou exigir confirmação
-   explícita do usuário em ambientes de produção.
-8. Revisar a regra de correspondência do catálogo do snpEff, que usa busca do
-   `genome_code` dentro do campo de código, para confirmar se não haverá
-   correspondências ambíguas em catálogos maiores.
-9. Adicionar testes automatizados específicos para:
-   - construção e limpeza de contêineres;
-   - criação e uso dos overlays;
-   - validação do banco do snpEff;
-   - preparação automática do banco snpEff antes de `viralflow run`;
-   - geração dos quatro gráficos SVG;
-   - seleção da versão estável do Pangolin.
+As diferenças também incluem preparação e validação do banco snpEff, novas
+opções no CLI, atualização dinâmica do Pangolin, quatro gráficos SVG nos
+resultados e correções dos nomes de comandos na documentação. Dois módulos
+Nextflow foram alterados: a verificação do banco snpEff e o tratamento dos
+cabeçalhos dos arquivos de saída do iVar.
+
+Nextflow permanece com **22.04.0 como versão padrão** no instalador e no wrapper;
+a configuração da pipeline continua usando o backend **`singularity`**.
+Micromamba **1.5.7** é a versão baixada pelo instalador quando o binário local
+não existe. Java **17** permanece nos ambientes ativos. Essas versões são as
+desta branch, independentemente das versões selecionadas pela GUI em outro
+repositório.
+
+A referência da comparação é `WallauBioinfo/develop`, commit
+`16cb3f30b1d3`. O conteúdo de `develop-SIF3-MAC` foi conferido a partir do
+commit `c108466598cd`, incluindo a reescrita deste documento no diretório de
+trabalho. São **36 arquivos diferentes: 26 modificados e 10 adicionados**.
+Nenhum arquivo da referência foi removido. A comparação inclui documentação,
+instalador, testes e arquivos auxiliares, sem organização por datas ou commits.
+
+## Diferenças por arquivo
+
+### `.gitignore` — modificado
+
+Acrescenta a exclusão de `vfnext/containers/*.overlay`, evitando versionar os
+arquivos persistentes locais dos containers. Também acrescenta uma quebra de
+linha ao final do arquivo. As exclusões de imagens SIF e demais artefatos
+preexistentes permanecem.
+
+### `.readthedocs.yaml` — modificado
+
+Remove uma linha final que continha somente espaços e normaliza o final do
+arquivo. Não altera a configuração funcional do Read the Docs.
+
+### `.viralflow-gui` — adicionado
+
+Inclui metadados JSON que associam as ações da GUI aos comandos do CLI:
+execução, atualização completa ou somente de dados do Pangolin, personalização
+do banco snpEff e construção de containers. Não contém implementação da GUI.
+
+### `README.md` — modificado
+
+Acrescenta instruções de instalação automatizada e manual para Linux/WSL,
+AMD64, ARM64, distribuições Debian/Ubuntu e RPM e macOS/Lima. Documenta
+Apptainer como requisito dos scripts auxiliares, o instalador, a possibilidade
+de adiar a construção dos containers e os caminhos de instalação.
+
+Na instalação Linux padrão, o checkout fica em `~/ViralFlow`, os comandos em
+`~/.local/bin` e o ambiente Micromamba em
+`~/.local/share/viralflow/micromamba`. Para Lima, descreve dependências no
+sistema de arquivos Linux em `/var/lib/viralflow`, com o repositório na pasta
+macOS compartilhada e um launcher no host que encaminha as chamadas à VM.
+
+### `dev.md` — modificado
+
+Substitui o procedimento manual de instalação e compilação de Singularity
+por orientações de uso do instalador da branch. Resume plataformas, caminhos
+padrão e construção posterior dos containers por arquitetura. Preserva a
+orientação inicial sobre seleção de arquitetura e organização dos containers.
+
+### `docs/installation.md` — modificado
+
+Corrige o exemplo de construção para o comando real `build-containers`, em
+vez de `build_containers`. Remove também espaços ao final de uma linha da
+lista de etapas de instalação. O procedimento de instalação preexistente
+continua no documento.
+
+### `docs/quickstart.md` — modificado
+
+Corrige os nomes dos comandos e opções para a forma com hífens usada pelo CLI:
+personalização snpEff, atualização Pangolin e atualização somente de dados.
+O conteúdo restante do guia em inglês é preservado.
+
+### `docs-pt/installation.md` — modificado
+
+Corrige o comando de construção para `build-containers`. As demais instruções
+de instalação em português permanecem iguais à referência.
+
+### `docs-pt/quickstart.md` — modificado
+
+Corrige comandos e opções de personalização snpEff e atualização Pangolin para
+a forma com hífens. Preserva o restante das orientações em português.
+
+### `docs-es/installation.md` — modificado
+
+Corrige o comando de construção para `build-containers`. As demais instruções
+de instalação em espanhol permanecem iguais à referência.
+
+### `docs-es/quickstart.md` — modificado
+
+Corrige comandos e opções de personalização snpEff e atualização Pangolin para
+a forma com hífens. Corrige também a opção `--params-file` nos dois exemplos
+de execução, que utilizavam `--params_file`.
+
+### `envs/amd64-legado.yml` — adicionado
+
+É uma cópia idêntica de `envs/amd64.yml` do upstream. Preserva os canais,
+Nextflow 22.04.0, Java 17, spython 0.3.1 e SingularityCE 3.11.4, além das
+demais dependências. Serve como definição legada; o instalador usa o arquivo
+ativo `envs/amd64.yml`.
+
+### `envs/amd64.yml` — modificado
+
+Comenta as dependências `nextflow=22.04.0` e `singularityce=3.11.4`, retirando-as
+da instalação do ambiente Conda ativo. Nextflow é instalado separadamente e
+o runtime de containers é fornecido pelo host. Preserva os canais, Java 17,
+spython 0.3.1 e as demais dependências do upstream.
+
+### `envs/arm64-legado.yml` — adicionado
+
+É uma cópia idêntica de `envs/arm64.yml` do upstream. Preserva os canais,
+Nextflow 22.04.0, Java 17, click 8.3, spython e demais dependências. O instalador
+usa a definição ativa `envs/arm64.yml`.
+
+### `envs/arm64.yml` — modificado
+
+Comenta somente a dependência `nextflow=22.04.0`, retirando Nextflow do ambiente
+Conda ativo. Preserva canais, Java 17, click 8.3, spython e demais dependências.
+
+### `envs/legado.yml` — adicionado
+
+Inclui uma definição alternativa de ambiente com Python limitado a versões
+entre 3.9 e anteriores a 3.13, Java 17, bibliotecas Python, snpEff e utilitários
+de sistema. Declara Nextflow e SingularityCE como dependências externas ao
+ambiente. Essa definição não é selecionada automaticamente pelo instalador.
+
+### `fork-camilo.md` — adicionado
+
+Documenta o estado atual da branch e as diferenças de cada arquivo em relação
+a `WallauBioinfo/develop`, incluindo arquivos documentais e auxiliares. As
+informações descrevem o conteúdo do código, sem histórico cronológico.
+
+### `install.sh` — adicionado
+
+Inclui instalador para Linux/WSL AMD64 e ARM64 e macOS/Lima. Detecta plataforma
+e arquitetura; instala pacotes de sistema; instala ou reutiliza Apptainer;
+configura o remote SylabsCloud, o mapeamento fakeroot e o link de `unsquashfs`.
+Suporta gerenciadores APT, DNF e YUM e estratégias específicas para Debian.
+
+Instala Micromamba 1.5.7 quando `${BIN_DIR}/micromamba` não existe e baixa o
+launcher Nextflow quando `${BIN_DIR}/nextflow` não existe. Reutiliza binários
+executáveis já presentes nesses caminhos sem exigir que tenham uma versão
+específica. O launcher ViralFlow exporta `NXF_VER`, com padrão 22.04.0.
+
+Clona a branch configurada ou atualiza um checkout existente por fast-forward.
+Exige que o checkout existente esteja na branch esperada e evita atualizá-lo
+quando há alterações locais. Cria o ambiente pelo YAML da arquitetura,
+instala o wrapper em modo editável e liga `vfnext` ao ambiente instalado.
+Para atualizar um ambiente existente, o código usa `micromamba env update`.
+
+Cria launchers Linux e macOS, configura o PATH nas inicializações de shell,
+verifica versões e pode construir os containers. Oferece configuração de
+repositório, branch, diretórios, versão Nextflow, modo de simulação, instalação
+sem containers e preservação do checkout sem atualização.
+
+No macOS, cria ou inicia uma VM Lima ARM64, verifica a montagem gravável da
+pasta pessoal do host, instala dependências em `/var/lib/viralflow` dentro da
+VM e cria um launcher no host. O script verifica Apptainer, mas não cria
+explicitamente o link de compatibilidade `singularity`.
+
+### `setup.py` — modificado
+
+Remove espaços ao final de duas linhas da descrição do pacote. Não altera
+versão, dependências, entry point ou comportamento do empacotamento.
+A versão declarada continua sendo 1.4.0.
+
+### `tests/install-script.test.sh` — adicionado
+
+Verifica sintaxe do instalador, presença de uma opção de ajuda e a chamada de
+verificação do Nextflow pelo caminho do binário instalado. Executa o
+instalador em modo `--dry-run` para Linux AMD64, Linux ARM64 e macOS ARM64,
+com pastas pessoais temporárias. Confere caminhos, configuração do PATH e
+argumentos encaminhados para Lima. Não instala dependências nem executa a
+pipeline; não valida uma reinstalação real do ambiente Micromamba.
+
+### `vfnext/bin/checkSnpEffDB.py` — adicionado
+
+Extrai e amplia a verificação que ficava embutida no módulo Nextflow.
+Consulta o catálogo, exige uma única correspondência e verifica a existência
+do diretório do banco dentro do container. Procura nos locais conhecidos das
+imagens AMD64 e ARM64 e grava o log de entradas também diante de erros.
+
+Acrescenta mensagens com o contexto da execução e orientações sobre preparação
+prévia do banco. A correspondência do código no catálogo continua sendo uma
+busca por substring. A verificação de instalação testa a presença do diretório,
+sem validar a integridade de todos os arquivos do banco.
+
+### `vfnext/bin/compileOutput.py` — modificado
+
+Acrescenta quatro gráficos SVG à compilação dos resultados:
+
+- `reads_count_plot.svg`: quantidade total de leituras por amostra.
+- `coverage_plot.svg`: abrangência versus profundidade média de cobertura,
+  com uma linha de regressão da visualização.
+- `coverage_breadth_summary_plot.svg`: distribuição por faixas de cobertura.
+- `coverage_breadth_decile_plot.svg`: distribuição por intervalos de 10%.
+
+Inclui funções auxiliares de escala, conversão para porcentagens, ordenação,
+escape SVG e destaque dos controles negativos identificados pelo prefixo
+`Cneg`. Os gráficos são produzidos a partir das tabelas existentes, sem nova
+biblioteca gráfica. Essa é uma diferença na apresentação dos resultados,
+além das adaptações de instalação e execução.
+
+### `vfnext/configs/containers.config` — modificado
+
+Mantém `singularity.enabled` e a montagem automática do upstream. Remove
+as opções globais de escrita selecionadas por arquitetura e acrescenta
+montagens de overlay somente em `runPangolin`, `runSnpEff` e `checkSnpEffDB`.
+
+Os processos usam `pangolin_4.4.overlay` ou `snpeff_5.0.overlay` em modo
+somente leitura. As imagens e os nomes de containers atribuídos aos processos
+permanecem iguais ao upstream. Não habilita o backend nativo Apptainer.
+
+### `vfnext/containers/add_entries_SnpeffDB.sh` — modificado
+
+Passa a exigir Apptainer e trabalhar com o overlay persistente do snpEff,
+em vez de alterar um sandbox diretamente. Usa execução estrita do shell,
+validação de argumentos e verificações de existência das imagens e do overlay.
+
+Detecta a instalação do snpEff dentro do container, evita duplicar a entrada
+de configuração e utiliza uma pasta temporária com limpeza automática.
+A preparação do banco grava seus arquivos no overlay; o catálogo local é
+atualizado usando a imagem e esse mesmo overlay. Os caminhos internos são
+resolvidos em tempo de execução para atender às duas arquiteturas.
+
+### `vfnext/containers/build_containers.py` — modificado
+
+Reestrutura o construtor com argumentos validados, comandos em listas e
+exigência explícita de Apptainer. Constrói Pangolin e snpEff como SIF, em vez
+dos sandboxes do upstream. Imagens ou diretórios já existentes são aceitos e
+preservados; um build sem limpeza não converte automaticamente artefatos antigos.
+
+Usa staging configurável, com padrão `/var/tmp/viralflow-apptainer`, e separa
+trabalho, arquivos temporários e cache. Constrói no sistema de arquivos Linux
+e copia o resultado para o repositório, atendendo a pastas compartilhadas com
+macOS. Limpa temporários e área de trabalho, preservando o cache de downloads,
+e remove resultados parciais quando a construção falha.
+
+Acrescenta opções para limpeza prévia, diretório de staging e quantidade de
+processos do `mksquashfs`, com padrão de um processo. Exporta variáveis de
+staging Apptainer e mantém variáveis ambientais `SINGULARITY_*` compatíveis.
+Cria overlays separados de 2 GiB para Pangolin e 1 GiB para snpEff.
+
+Mantém as etapas de preparação de dataset e catálogo quando as imagens
+correspondentes existem. Gera o catálogo com o overlay snpEff e preserva a
+exigência de `unsquashfs` em `/usr/local/bin`. Retorna códigos de falha ao
+chamador quando uma etapa não conclui.
+
+### `vfnext/containers/build_containers_alterado.py` — adicionado
+
+Guarda uma implementação intermediária de construção para macOS/Lima.
+Usa staging em `~/.viralflow/apptainer` dentro da VM, o nome antigo da imagem
+Pangolin 4.3, construção SIF e uma tentativa de overlay associado à imagem.
+Inclui cópia dos artefatos para o repositório e etapas auxiliares de preparação.
+Não é chamado pelo wrapper ou pela pipeline atuais.
+
+### `vfnext/containers/build_containers_original.py` — adicionado
+
+Guarda uma implementação auxiliar antiga, com chamadas `singularity`,
+construção de sandboxes e nome Pangolin 4.3. Inclui as etapas antigas de
+preparação dos containers e a verificação fixa de `unsquashfs`. Não é chamado
+pelo wrapper ou pela pipeline atuais; é um arquivo histórico adicional,
+não uma substituição do construtor ativo.
+
+### `vfnext/containers/def_files/amd64/Singularity_pangolin` — modificado
+
+Troca a base Debian 11 obtida pela biblioteca pela base Docker Debian 12 slim.
+Acrescenta compiladores, cabeçalhos Python e Git, atualização do Micromamba
+e `minimap2` às ferramentas do ambiente. O transporte Docker da imagem base
+não implica uso do Docker Engine na execução da pipeline.
+
+Substitui a instalação Conda do Pangolin por instalação de sua tag 4.4 via
+pip/Git, acompanhada dos projetos de dados e dependências relacionados.
+Restringe `setuptools` a versões anteriores a 81, instala `wheel` e desabilita
+isolamento de build nessas instalações. Preserva as versões explícitas de
+Python 3.11, Usher e Snakemake presentes na definição do upstream.
+
+### `vfnext/containers/def_files/amd64/Singularity_snpEff` — modificado
+
+Preserva imagem base e versões das ferramentas. Direciona os repositórios
+APT da distribuição antiga para `archive.debian.org`, desativa a expiração
+dos índices arquivados e acrescenta interrupção diante de falhas. Permite
+preparar a imagem usando os repositórios arquivados.
+
+### `vfnext/containers/def_files/arm64/Singularity_pangolin` — modificado
+
+Preserva a base e as versões principais da definição ARM64. Acrescenta Git e
+pip ao ambiente, instala `wheel`, troca a restrição `setuptools==81.0.0` por
+`setuptools<81` e usa `python -m pip` com build sem isolamento nas instalações
+via Git. Pangolin já era instalado pela tag 4.4 via Git no upstream ARM64;
+a mudança adapta suas dependências e o processo de instalação.
+
+### `vfnext/containers/def_files/arm64/Singularity_snpEff` — modificado
+
+Acrescenta a preparação antecipada do banco de referência padrão na imagem
+ARM64. O restante da definição permanece igual ao upstream. Essa preparação
+adicional não aparece como mudança correspondente na definição AMD64.
+
+### `vfnext/containers/spython_functions.py` — modificado
+
+Remove o import de spython e troca o download por chamadas diretas a
+`apptainer pull`, com exigência explícita desse executável. Usa subprocessos
+com lista de argumentos e diretório de containers definido, propagando erros
+ao chamador. O download continua usando referências `library://` e depende
+do remote configurado; o instalador seleciona SylabsCloud.
+
+Acrescenta retentativas por imagem, configuráveis por
+`VIRALFLOW_CONTAINER_PULL_RETRIES` e
+`VIRALFLOW_CONTAINER_PULL_RETRY_DELAY`, com padrões de três tentativas e
+dez segundos. Remove arquivos SIF parciais após falhas e identifica as
+tentativas no log. Acrescenta erro explícito quando faltam containers ao fim
+da rotina, preservando a condição e a lista usada pelo laço externo original.
+
+### `vfnext/modules/checkSnpEffDB.nf` — modificado
+
+Substitui o Python embutido pela chamada ao novo `checkSnpEffDB.py`.
+Encaminha código da referência, vírus, catálogo e caminhos do log. Mantém
+como saída `snpEffDB_entry_found.log`. A validação passa a incluir a instalação
+do banco, além de sua presença no catálogo.
+
+### `vfnext/modules/runIvar.nf` — modificado
+
+Substitui renomeação seguida de `sed -i` por geração dos arquivos finais com
+`awk`, alterando o primeiro cabeçalho e preservando as linhas seguintes.
+Remove os arquivos intermediários após a conversão. Preserva as chamadas
+iVar/samtools e seus argumentos científicos; a diferença fica no tratamento
+dos arquivos de saída e seus cabeçalhos.
+
+### `wrapper/__init__.py` — modificado
+
+Acrescenta exigência de Apptainer, helpers de subprocessos, criação de
+overlays e limpeza de artefatos. Construção e manutenção passam a usar listas
+de argumentos e propagação de falhas. O build usa o interpretador Python do
+wrapper, encaminha opções de limpeza e staging e continua baixando as imagens
+antes de construir os containers locais.
+
+Reorganiza a leitura de parâmetros em `load_params`, preservando as chaves
+aceitas. Antes de chamar Nextflow, verifica catálogo e diretório do banco
+snpEff e prepara o banco no overlay quando necessário. Essa etapa só é
+acionada quando o arquivo de parâmetros habilita `runSnpEff`; sem esse
+parâmetro, o wrapper considera a preparação desabilitada.
+
+As atualizações Pangolin usam um overlay gravável. A atualização completa
+consulta a API GitHub para selecionar uma tag estável, com fallback para as
+tags paginadas, atualiza ferramenta e dependências e verifica consistência
+com `pip check`. A atualização somente de dados conserva sua operação própria.
+A criação da imagem fixa a tag 4.4, enquanto a atualização completa pode
+selecionar uma versão estável mais recente.
+
+Permite definir a versão Nextflow por `NXF_VER`, mantendo 22.04.0 como padrão.
+Conserva a seleção do executável pelo PATH, a montagem final do comando em
+string, `os.system` e a opção `-resume`. Não implementa seleção absoluta por
+`VIRALFLOW_NEXTFLOW`. O import preexistente de `distutils` permanece.
+
+### `wrapper/cli.py` — modificado
+
+Acrescenta `--clean` e `--staging-dir` ao comando de construção, encaminhando
+as escolhas para o wrapper. Acrescenta `--arch` ao comando de execução para
+orientar a preparação do banco snpEff, com padrão AMD64. Preserva os nomes dos
+comandos e as demais opções do CLI do upstream.
+
+## Arquivos e comportamentos preservados
+
+`vfnext/main.nf`, `vfnext/nextflow.config`, `vfnext/configs/profiles.config`
+e o workflow de tratamento de entradas são idênticos a `WallauBioinfo/develop`.
+Os demais módulos Nextflow permanecem iguais à referência, com exceção dos
+dois módulos descritos acima. Parâmetros científicos padrão, dados de teste
+versionados e listas de repositórios de containers também são preservados.
+
+Esta branch tem mudanças no ambiente, na preparação e validação de recursos
+locais e na apresentação dos resultados. Portanto, seu conjunto de diferenças
+é maior que uma adaptação exclusiva do comando de containers ou do sistema
+operacional. A descrição dos módulos alterados e dos gráficos faz parte da
+comparação completa, mesmo que não sejam mudanças de algoritmos de análise.
+
+## Particularidades do estado atual
+
+Os scripts auxiliares exigem `apptainer`, enquanto Nextflow continua usando
+`singularity`. Para executar Nextflow com Apptainer, o comando de compatibilidade
+`singularity` precisa estar disponível no host. O instalador desta branch não
+cria esse link explicitamente; sua presença pode vir do pacote do runtime.
+
+O instalador baixa Micromamba 1.5.7, mas usa `env update` para ambientes
+existentes. Esse subcomando não está disponível no Micromamba 1.5.7, conforme
+os testes isolados anteriores das versões antigas. O teste `--dry-run` desta
+branch não cobre essa operação real. A documentação registra essa diferença
+sem alterar o instalador.
+
+Os ambientes ativos ainda declaram spython, embora o helper de download tenha
+removido seu import. O helper também preserva a condição original com `or`
+no laço externo de verificação; as retentativas acrescentadas são internas a
+cada download. O comando Nextflow ainda depende do PATH e seu retorno não é
+propagado pelo wrapper como nas operações que usam `check_call`.
+
+Os arquivos `*-legado.yml`, `build_containers_original.py` e
+`build_containers_alterado.py` são referências adicionais. Não são escolhidos
+pelo fluxo normal do instalador ou pelo wrapper. Sua presença está incluída
+na contagem dos arquivos diferentes.
+
+## Conferência do documento
+
+Esta revisão compara o conteúdo atual dos arquivos diretamente com a referência
+Git, incluindo alterações locais do diretório de trabalho. Foram conferidos
+os 36 arquivos diferentes, as duas cópias legadas idênticas aos YAMLs do
+upstream e a preservação do fluxo/configurações principais. Somente este
+documento foi reescrito; não foram modificados fontes, ambientes ou containers.
+
+A revisão documental não executa instalação, construção ou pipeline, nem
+constitui nova validação de Linux, WSL, ARM64 ou macOS. O teste existente do
+instalador cobre sintaxe e simulação, conforme descrito em sua seção.
+
+Para reproduzir a comparação:
+
+```bash
+git diff --name-status WallauBioinfo/develop --
+git diff --stat WallauBioinfo/develop --
+git diff WallauBioinfo/develop --
+```
