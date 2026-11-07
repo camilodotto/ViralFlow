@@ -5,18 +5,23 @@ import subprocess
 def get_repository(repository_list):
     containers_name_list = []
     with open(repository_list, "r") as containers:
-        file = containers.readlines()
-        for container in file:
+        for line_number, container in enumerate(containers, start=1):
             container = container.strip()
             if not container:
                 continue
-            # Full path: e.g. wallaulabs2/viralflow-amd64/edirect:1.1.0
-            parts = container.split("/")
-            org = parts[0]  # wallaulabs2
-            project = parts[1]  # viralflow-amd64
-            container_version = parts[2]  # edirect:1.1.0
-            full_repo = f"{org}/{project}/{container_version}"
-            containers_name_list.append((project, container_version, full_repo))
+            # Keep the complete ORAS URI, but preserve the local image:tag.sif name.
+            parts = container.removeprefix("oras://").split("/")
+            if (not container.startswith("oras://") or len(parts) < 3
+                    or not all(parts) or ":" not in parts[-1]
+                    or any(char.isspace() for char in container)):
+                raise ValueError(
+                    f"{repository_list}:{line_number}: expected "
+                    "oras://registry/namespace/image:tag"
+                )
+            container_version = parts[-1]
+            if not all(container_version.split(":", 1)):
+                raise ValueError(f"{repository_list}:{line_number}: missing image name or tag")
+            containers_name_list.append((parts[-2], container_version, container))
     return containers_name_list
 
 
@@ -24,10 +29,9 @@ def container_pull(containers_dir, containers_name_list):
     for container in containers_name_list:
         container_version = container[1]
         full_repo = container[2]
-        print(f"Downloading container {container_version}. This could be take a while. Please Wait ...")
+        print(f"Downloading container {container_version} from {full_repo}. Please wait ...", flush=True)
         subprocess.check_call([
-            "singularity", "pull", "-F", "--library", "https://library.sylabs.io",
-            f"{container_version}.sif", f"library://{full_repo}"
+            "singularity", "pull", "-F", f"{container_version}.sif", full_repo
         ], cwd=containers_dir)
 
 

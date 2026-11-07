@@ -158,14 +158,37 @@ esac
                     self.assertEqual(config.read_text(), "# existing configuration\n")
                     self.assertFalse((config.parent / "data/TEST").exists())
 
-    def test_pull_uses_singularity_and_explicit_library(self):
-        image = ("test", "example:1", "test/test/example:1")
+    def test_pull_uses_oras_and_preserves_local_filename(self):
+        image = ("viralflow-amd64", "example:1",
+                 "oras://ghcr.io/camilodotto/viralflow-amd64/example:1")
         with patch.object(containers.subprocess, "check_call") as run:
             containers.container_pull("/tmp/container-test", [image])
         command = run.call_args.args[0]
-        self.assertEqual(command[0], "singularity")
-        self.assertEqual(command[command.index("--library") + 1], "https://library.sylabs.io")
+        self.assertEqual(command, ["singularity", "pull", "-F", "example:1.sif", image[2]])
         self.assertEqual(run.call_args.kwargs["cwd"], "/tmp/container-test")
+
+    def test_manifests_preserve_image_names_and_separate_architectures(self):
+        for arch in ("amd64", "arm64"):
+            with self.subTest(arch=arch):
+                images = containers.get_repository(
+                    ROOT / f"vfnext/containers/repositories/repositories_{arch}.txt"
+                )
+                self.assertEqual(len(images), 11)
+                for project, image, uri in images:
+                    self.assertEqual(project, f"viralflow-{arch}")
+                    self.assertEqual(uri, f"oras://ghcr.io/camilodotto/{project}/{image}")
+                with tempfile.TemporaryDirectory() as temporary:
+                    (Path(temporary) / f"{images[0][1]}.sif").touch()
+                    self.assertEqual(containers.check_containers(images, temporary), images[1:])
+
+    def test_manifest_rejects_legacy_and_malformed_addresses(self):
+        for uri in ("wallaulabs2/viralflow-amd64/edirect:1.1.0",
+                    "oras://ghcr.io/camilodotto/edirect", "oras://ghcr.io/user/image:"):
+            with self.subTest(uri=uri), tempfile.TemporaryDirectory() as temporary:
+                manifest = Path(temporary) / "repositories.txt"
+                manifest.write_text(uri + "\n")
+                with self.assertRaises(ValueError):
+                    containers.get_repository(manifest)
 
     def test_missing_downloads_terminate_instead_of_looping_forever(self):
         missing = [("test", "example:1", "test/test/example:1")]

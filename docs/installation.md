@@ -13,12 +13,39 @@ Nextflow, Apptainer, ViralFlow and containers. Its default paths are
 `~/ViralFlowGUI/bin`, `~/ViralFlowGUI/micromamba` and `~/ViralFlowGUI/ViralFlow`.
 This branch does not provide `install.sh`.
 
+### Container distribution (GHCR)
+
+`viralflow build-containers` downloads the 11 prebuilt SIF images from
+`oras://ghcr.io/camilodotto/viralflow-amd64/<image>:<tag>` using the host's
+`singularity` compatibility command. Public images need no login, token or
+Sylabs remote configuration. The repository lists in
+`vfnext/containers/repositories/` contain complete ORAS URIs. Local filenames
+remain `<image>:<tag>.sif`, so existing images are reused and Nextflow paths
+are unchanged. Pangolin and snpEff are still built locally as writable sandboxes.
+
+ARM64 uses the separate `viralflow-arm64` prefix. As of 2026-11-07, anonymous
+manifest requests for the 11 AMD64 images succeeded; all ARM64 requests returned
+403. ARM64 installation requires those images to be published and made public;
+never substitute AMD64 images for them.
+
+To test an anonymous download, use a clean user environment without registry
+credentials and a temporary output directory:
+
+```bash
+singularity pull edirect:1.1.0.sif \
+  oras://ghcr.io/camilodotto/viralflow-amd64/edirect:1.1.0
+```
+
+Existing GUI installations must update their ViralFlow checkout to
+`feat/dev/ubuntu26.04-ghcr.io` before running `build-containers` again.
+
+
 For manual installation, provide Micromamba and a working `singularity` command
 on the host (Singularity or Apptainer's compatibility command), put them in
 `PATH`, then create the environment from the appropriate YAML:
 
 ```bash
-git clone -b feat/develop/ubuntu26.04 https://github.com/camilodotto/ViralFlow.git
+git clone -b feat/dev/ubuntu26.04-ghcr.io https://github.com/camilodotto/ViralFlow.git
 cd ViralFlow
 micromamba env create -n viralflow -f envs/amd64.yml -y
 micromamba run -n viralflow python -m pip install -e .
