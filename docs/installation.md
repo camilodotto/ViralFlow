@@ -23,6 +23,20 @@ Sylabs remote configuration. The repository lists in
 remain `<image>:<tag>.sif`, so existing images are reused and Nextflow paths
 are unchanged. Pangolin and snpEff are still built locally as writable sandboxes.
 
+The AMD64 snpEff recipe uses Debian 12 and Micromamba 1.5.7, with
+`snpeff=5.0=hdfd78af_3` and Java 17 installed under `/opt/conda`. This avoids
+upgrading Conda inside the old Miniconda 4.7.12 base (glibc 2.28), which can
+fail dependency resolution against current channels. The database maintenance
+path `/opt/conda/share/snpeff-5.0-3` is preserved, and the build verifies the
+downloaded `NC_045512.2` database before completing. Existing snpEff sandboxes
+are reused; this recipe applies to new builds.
+
+Validated on 2026-11-07: a clean AMD64 sandbox build, snpEff 5.0e/Java 17,
+annotation of a test VCF using `NC_045512.2` (including the HTML summary and
+gene report), and the complete `viralflow build-containers` command in the
+GUI installation. The command completed with exit code 0, including the
+Nextclade dataset and snpEff database catalog. The 14 Python runtime tests passed.
+
 ARM64 uses the separate `viralflow-arm64` prefix. As of 2026-11-07, anonymous
 manifest requests for the 11 AMD64 images succeeded; all ARM64 requests returned
 403. ARM64 installation requires those images to be published and made public;
